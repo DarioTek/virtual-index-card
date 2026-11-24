@@ -11,7 +11,7 @@ echo "Start Current timestamp: $(timestamp)"
 export TZ="America/New_York"
 
 # Navigate to your project root directory (update this path to where your project lives)
-PROJECT_DIR="/home/dariotek/Python/virtual_index_card"
+PROJECT_DIR="/mnt/ssd/git/virtual-index-card"
 cd "$PROJECT_DIR" || { echo "[ERROR] Project directory not found: $PROJECT_DIR"; exit 1; }
 
 # Ensure logs directory exists
