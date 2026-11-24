@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}My deck · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="deck-header">
+  <div>
+    <h1>My deck</h1>
+    <p class="card-count">{{ cards|length }} card{% if cards|length != 1 %}s{% endif %}</p>
+  </div>
+  <button type="button" id="shuffle-btn" class="secondary">Shuffle deck</button>
+</section>
+
+<section class="editor" aria-labelledby="new-card-heading">
+  <h2 id="new-card-heading">Add a card</h2>
+  <form id="create-form" class="card-form">
+    <label for="new-front">Front</label>
+    <textarea id="new-front" name="front" rows="3" maxlength="5000" required
+              placeholder="Question or prompt"></textarea>
+    <label for="new-back">Back</label>
+    <textarea id="new-back" name="back" rows="3" maxlength="5000" required
+              placeholder="Answer or note"></textarea>
+    <button type="submit">Add card</button>
+    <p class="form-error" id="create-error" role="alert" hidden></p>
+  </form>
+</section>
+
+<section class="cards" id="cards" aria-label="Index cards">
+  {% for card in cards %}
+  <article class="card" data-card-id="{{ card.id }}">
+    <button type="button" class="flip-button" aria-pressed="false"
+            aria-label="Flip card {{ loop.index }}">
+      <span class="card-inner">
+        <span class="card-face card-front">{{ card.front }}</span>
+        <span class="card-face card-back">{{ card.back }}</span>
+      </span>
+    </button>
+    <div class="card-actions">
+      <button type="button" class="edit-btn secondary small">Edit</button>
+      <button type="button" class="delete-btn danger small">Delete</button>
+    </div>
+    <form class="card-form edit-form" hidden>
+      <label>Front <textarea name="front" rows="3" maxlength="5000" required>{{ card.front }}</textarea></label>
+      <label>Back <textarea name="back" rows="3" maxlength="5000" required>{{ card.back }}</textarea></label>
+      <button type="submit">Save</button>
+      <button type="button" class="cancel-edit secondary">Cancel</button>
+      <p class="form-error" role="alert" hidden></p>
+    </form>
+  </article>
+  {% else %}
+  <p class="empty">No cards yet. Add your first card above.</p>
+  {% endfor %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='/app.js') }}" defer></script>
+{% endblock %}

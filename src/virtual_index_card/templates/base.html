@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token|default('', true) }}">
+  <title>{% block title %}Virtual Index Cards{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">Virtual Index Cards</a>
+    {% if user %}
+    <div class="account">
+      <span class="username">{{ user['username'] }}</span>
+      <form class="logout-form" method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token|default('', true) }}">
+        <button type="submit">Log out</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
