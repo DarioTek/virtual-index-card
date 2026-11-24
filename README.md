@@ -29,7 +29,7 @@ This creates `.venv` and installs the locked dependencies from `uv.lock`.
 
 ```bash
 VIC_DATABASE_PATH=./data/virtual-index-card.sqlite3 \
-  uv run uvicorn virtual_index_card.app:app --reload --host 127.0.0.1 --port 8000
+  uv run uvicorn virtual_index_card.app:app --reload --host 0.0.0.0 --port 10001
 ```
 
 Open <http://127.0.0.1:8000> and create an account. The SQLite file is created automatically on first start and is ignored by Git.
