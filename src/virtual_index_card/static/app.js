@@ -42,8 +42,16 @@ document.getElementById('create-form')?.addEventListener('submit', (event) => {
   reloadAfter(apiRequest('/api/cards', { method: 'POST', body: JSON.stringify(payload) }));
 });
 
-document.getElementById('shuffle-btn')?.addEventListener('click', () => {
-  reloadAfter(apiRequest('/api/deck/shuffle', { method: 'POST' }));
+document.getElementById('shuffle-btn')?.addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await apiRequest('/api/deck/shuffle', { method: 'POST' });
+    window.location.assign('/review');
+  } catch (error) {
+    button.disabled = false;
+    window.alert(error.message);
+  }
 });
 
 document.querySelectorAll('.edit-form').forEach((form) => {

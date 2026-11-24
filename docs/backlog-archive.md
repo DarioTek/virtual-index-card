@@ -45,3 +45,23 @@ Completed backlog items are retained here for traceability. IDs are never reused
 - **Plan reference:** `PLAN.md` current assignment.
 - **Completion date:** 2026-11-24
 - **Validation / delivery reference:** `uv run pytest -q` — 24 passed (20 before Review mode, 4 new Review tests); live `curl` smoke test confirmed single-card rendering, position indicator, flip control markup, next/wrap links. Delivered in `app.py`, `templates/review.html`, `static/app.js`, `static/styles.css`.
+
+### BL-026: Review-only shuffle control and newest-first management list
+
+- **Category:** Feature
+- **Priority:** High
+- **Status:** Completed (archived)
+- **Date added:** 2026-11-24
+- **Last updated:** 2026-11-24
+- **Description:** Show newest-created cards first on the management page and provide shuffle only on the Review page, retaining persisted shuffled Review order.
+- **Expected outcome:** Creating and editing cards stays easy to manage chronologically while Review can cycle through a shuffled deck.
+- **Acceptance criteria:**
+  - [x] Management lists cards newest-created first, even after Review shuffle and reload; editing does not reorder them.
+  - [x] Only Review displays the shuffle control, which restarts at the first card of the newly saved order.
+  - [x] Review order persists across reloads and remains account-scoped.
+- **Dependencies:** Completed `BL-025` (Review mode).
+- **Related files/components:** Repository queries, routes, deck/review templates, JavaScript, tests, docs.
+- **Notes:** User requested this refinement; the earlier durable-shuffle requirement still applies.
+- **Plan reference:** `PLAN.md` current assignment.
+- **Completion date:** 2026-11-24
+- **Validation / delivery reference:** `uv run pytest -q` — 25 passed, 1 Starlette/httpx deprecation warning; `node --check src/virtual_index_card/static/app.js` and `git diff --check` passed. Integration tests verify the control appears only in Review, creation order is independent of saved Review order across login and reload, CSRF remains required, and data remains account-scoped. JavaScript navigation to `/review` was inspected in source, not browser-tested.

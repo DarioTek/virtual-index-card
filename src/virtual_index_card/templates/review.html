@@ -10,7 +10,12 @@
     <p class="card-count">No cards to review</p>
     {% endif %}
   </div>
-  <a class="secondary link-button" href="/">Back to deck</a>
+  <div class="review-actions">
+    {% if card %}
+    <button type="button" id="shuffle-btn" class="secondary"{% if total < 2 %} disabled{% endif %}>Shuffle deck</button>
+    {% endif %}
+    <a class="secondary link-button" href="/">Back to deck</a>
+  </div>
 </section>
 
 {% if card %}

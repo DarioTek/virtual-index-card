@@ -93,8 +93,18 @@ def delete_expired_sessions(connection: sqlite3.Connection, now: int) -> None:
 # --- Cards -----------------------------------------------------------------
 
 def list_cards(connection: sqlite3.Connection, user_id: int) -> list[Card]:
+    """Return the persisted order used during Review."""
     rows = connection.execute(
         "SELECT * FROM cards WHERE user_id = ? ORDER BY position, id", (user_id,)
+    ).fetchall()
+    return [_to_card(row) for row in rows]
+
+
+def list_cards_newest_first(connection: sqlite3.Connection, user_id: int) -> list[Card]:
+    """Return creation order for managing cards, independent of Review order."""
+    rows = connection.execute(
+        "SELECT * FROM cards WHERE user_id = ? ORDER BY created_at DESC, id DESC",
+        (user_id,),
     ).fetchall()
     return [_to_card(row) for row in rows]
 

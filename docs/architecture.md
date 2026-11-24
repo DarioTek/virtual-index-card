@@ -4,7 +4,7 @@
 
 ## Product shape
 
-A hosted FastAPI web application with one private deck per account. Notes are plain text; each card has a front and back; the user flips cards, performs CRUD, and shuffles the deck. Shuffle order is stored in SQLite and survives reloads.
+A hosted FastAPI web application with one private deck per account. Notes are plain text; each card has a front and back. The management page lists cards newest-created first for CRUD; Review shows one card at a time in the saved deck order and is the only page offering a shuffle control. Shuffle order is stored in SQLite and survives reloads, independently of the management view's creation order.
 
 ## Components
 
@@ -55,20 +55,20 @@ Indexes cover session expiry and `(user_id, position)`. Foreign keys are enabled
 | `GET`/`POST` | `/register` | Account form / create account | None |
 | `GET`/`POST` | `/login` | Login form / start session | None |
 | `POST` | `/logout` | End session | Session + CSRF form token |
-| `GET` | `/` | Deck page | Session |
-| `GET` | `/review?index=N` | Single-card Review mode | Session |
+| `GET` | `/` | Newest-created-first card management page | Session |
+| `GET` | `/review?index=N` | Single-card Review in saved order; shuffle control | Session |
 | `POST` | `/api/cards` | Create card | Session + `X-CSRF-Token` |
 | `PATCH` | `/api/cards/{id}` | Edit card | Session + CSRF |
 | `DELETE` | `/api/cards/{id}` | Delete card | Session + CSRF |
-| `POST` | `/api/deck/shuffle` | Persist new order | Session + CSRF |
+| `POST` | `/api/deck/shuffle` | Persist new Review order (called from Review UI) | Session + CSRF |
 
 ## Key flows
 
 1. **Registration/login:** validate input, hash password with PBKDF2-HMAC-SHA256 and a per-user salt, create a random session token, store only its SHA-256 hash, and set HttpOnly session plus readable CSRF cookies.
 2. **Flip:** the card's button toggles `aria-pressed` and a CSS class; the 3D transform reveals the back face. No server call.
-3. **CRUD:** JavaScript sends JSON with the CSRF header; the route validates text, writes through the repository, and the page reloads from server-rendered state.
-4. **Shuffle:** `shuffled_cards()` reorders with Fisher–Yates, positions are rewritten in one transaction, and the page re-renders in the saved order. Reload uses the same order.
-5. **Review:** `/review` reads the same saved order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links wrap around; arrow keys also navigate. No server call is needed to flip.
+3. **CRUD:** JavaScript sends JSON with the CSRF header; the route validates text, writes through the repository, and the management page reloads sorted by `created_at DESC, id DESC`. Edits and Review shuffles do not change this view's order.
+4. **Shuffle:** The control appears only in Review (disabled with one card, absent with none). `shuffled_cards()` reorders with Fisher–Yates, positions are rewritten in one transaction, and the browser navigates to `/review` to start at the first card of the saved new order. Reload uses the same order.
+5. **Review:** `/review` reads the saved `position` order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links wrap around; arrow keys also navigate. No server call is needed to flip.
 
 ## Security posture
 
@@ -86,7 +86,7 @@ HTTPS/reverse proxy, production secrets management, and scheduled backups are **
 
 ## Testing
 
-`uv run pytest -q` runs 24 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, persistence, shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
+`uv run pytest -q` runs 25 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, newest-first management, persisted Review shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
 
 ## Known limitations
 

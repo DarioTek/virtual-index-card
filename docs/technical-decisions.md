@@ -27,7 +27,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** The user confirmed that shuffle must persist across reloads.
 - **Decision:** Store an integer `position` per card; shuffle in a pure domain module with an injectable RNG; rewrite positions in one transaction.
 - **Alternatives considered:** Random sort keys, repeated random draws, transient order.
-- **Consequences:** Deterministic tests, no duplicate/lost cards, reload restores saved order.
+- **Consequences:** Deterministic tests, no duplicate/lost cards, reload restores saved Review order. The management page separately sorts by creation time (`created_at DESC, id DESC`), so shuffling Review never rearranges card-management display. The shuffle control is available only in Review and resets the cursor to card 1.
 
 ## TD-004: One deck, plain-text notes
 

@@ -1,6 +1,6 @@
 # virtual-index-card
 
-A hosted web application for personal index cards. Each registered account has one private deck: write notes on a card's front and back, flip between them, add/edit/delete cards, and shuffle the deck. The shuffled order persists across reloads.
+A hosted web application for personal index cards. Each registered account has one private deck: write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the deck, and that review order persists across reloads.
 
 All durable data — accounts, sessions, cards, and card order — is stored in **SQLite**.
 
@@ -8,8 +8,8 @@ All durable data — accounts, sessions, cards, and card order — is stored in 
 
 - Individual accounts with registration, login, and logout.
 - Per-account decks: one user cannot see or modify another user's cards.
-- Add, edit, delete, flip, and shuffle cards.
-- Review mode: one card at a time, tap to flip, and cycle through the deck.
+- Add, edit, delete, and flip cards on the management page, newest-created first.
+- Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
 - Plain-text notes with safe HTML escaping.
 - CSRF-protected writes and hashed passwords/session tokens.
 
@@ -48,7 +48,7 @@ Configuration (all optional):
 uv run pytest -q
 ```
 
-Verified on 2026-11-24 with `uv`: **24 passed**, 1 Starlette/httpx deprecation warning.
+Verified on 2026-11-24 with `uv`: **25 passed**, 1 Starlette/httpx deprecation warning.
 
 ## Project layout
 

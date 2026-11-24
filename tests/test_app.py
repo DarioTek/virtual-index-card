@@ -91,7 +91,9 @@ def test_crud_and_reload_persistence(client: TestClient) -> None:
         "/api/cards", json={"front": "first", "back": "one"}, headers=headers
     )
     card_id = created.json()["card"]["id"]
-    client.post("/api/cards", json={"front": "second", "back": "two"}, headers=headers)
+    second_id = client.post(
+        "/api/cards", json={"front": "second", "back": "two"}, headers=headers
+    ).json()["card"]["id"]
 
     updated = client.patch(
         f"/api/cards/{card_id}",
@@ -103,6 +105,10 @@ def test_crud_and_reload_persistence(client: TestClient) -> None:
     reloaded = client.get("/")
     assert "edited" in reloaded.text
     assert "second" in reloaded.text
+    assert [
+        int(value) for value in re.findall(r'data-card-id="(\d+)"', reloaded.text)
+    ] == [second_id, card_id]
+    assert 'id="shuffle-btn"' not in reloaded.text
 
     assert client.delete(f"/api/cards/{card_id}", headers=headers).status_code == 204
     reloaded = client.get("/")
@@ -122,6 +128,7 @@ def test_shuffle_order_persists_for_the_same_account(
         )
         assert response.status_code == 201
 
+    assert client.post("/api/deck/shuffle").status_code == 403
     shuffled = client.post("/api/deck/shuffle", headers=headers)
     assert shuffled.status_code == 200
     order = shuffled.json()["cards"]
@@ -137,7 +144,25 @@ def test_shuffle_order_persists_for_the_same_account(
     assert response.status_code == 303
     page = fresh_client.get("/").text
     rendered_ids = [int(value) for value in re.findall(r'data-card-id="(\d+)"', page)]
-    assert rendered_ids == [card["id"] for card in order]
+    assert rendered_ids == [4, 3, 2, 1]
+    assert 'id="shuffle-btn"' not in page
+
+    for index, card in enumerate(order):
+        review = fresh_client.get(f"/review?index={index}")
+        assert [
+            int(value) for value in re.findall(r'data-card-id="(\d+)"', review.text)
+        ] == [card["id"]]
+        assert 'id="shuffle-btn"' in review.text
+        assert f"Card {index + 1} of 4" in review.text
+
+    new_id = add_card(fresh_client, "card 4", "back 4")
+    assert [
+        int(value) for value in re.findall(r'data-card-id="(\d+)"', fresh_client.get("/").text)
+    ] == [new_id, 4, 3, 2, 1]
+    assert [
+        int(value)
+        for value in re.findall(r'data-card-id="(\d+)"', fresh_client.get("/review?index=4").text)
+    ] == [new_id]
 
 
 def test_accounts_cannot_access_each_others_cards(
@@ -206,6 +231,8 @@ def test_review_shows_one_card_and_cycles(client: TestClient) -> None:
     assert "Card 1 of 3" in page.text
     assert [int(value) for value in re.findall(r'data-card-id="(\d+)"', page.text)] == [ids[0]]
     assert 'aria-pressed="false"' in page.text
+    assert 'id="shuffle-btn"' in page.text
+    assert 'id="shuffle-btn" class="secondary" disabled' not in page.text
     assert "front 0" in page.text
     assert "back 0" in page.text
 
@@ -226,6 +253,11 @@ def test_review_empty_deck_shows_empty_state(client: TestClient) -> None:
     assert page.status_code == 200
     assert "No cards to review" in page.text
     assert "Add some cards to your deck" in page.text
+    assert 'id="shuffle-btn"' not in page.text
+
+    add_card(client, "only card", "back")
+    single = client.get("/review")
+    assert 'id="shuffle-btn" class="secondary" disabled' in single.text
 
 
 def test_review_shows_only_the_signed_in_accounts_cards(

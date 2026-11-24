@@ -39,6 +39,38 @@ def test_card_crud_is_scoped_to_user(connection: sqlite3.Connection) -> None:
     assert [card.id for card in repo.list_cards(connection, alice)] == [first.id]
 
 
+def test_management_order_uses_creation_time_not_review_position_or_edits(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    first = repo.create_card(connection, alice, "first", "back", "2026-11-24T10:00:00+00:00")
+    second = repo.create_card(
+        connection, alice, "second", "back", "2026-11-24T10:00:00+00:00"
+    )
+    third = repo.create_card(connection, alice, "third", "back", "2026-11-24T11:00:00+00:00")
+    repo.create_card(connection, bob, "bob", "back", "2026-11-24T12:00:00+00:00")
+
+    repo.update_card(connection, alice, first.id, "edited", "back", "2026-11-24T13:00:00+00:00")
+    repo.replace_positions(
+        connection,
+        alice,
+        [
+            type(third)(**{**third.__dict__, "position": 0}),
+            type(first)(**{**first.__dict__, "position": 1}),
+            type(second)(**{**second.__dict__, "position": 2}),
+        ],
+    )
+
+    assert [card.id for card in repo.list_cards_newest_first(connection, alice)] == [
+        third.id, second.id, first.id
+    ]
+    assert [card.id for card in repo.list_cards(connection, alice)] == [
+        third.id, first.id, second.id
+    ]
+    assert [card.front for card in repo.list_cards_newest_first(connection, bob)] == ["bob"]
+
+
 def test_session_expires_and_can_be_deleted(connection: sqlite3.Connection) -> None:
     user_id = add_user(connection, "alice")
     token = new_token()

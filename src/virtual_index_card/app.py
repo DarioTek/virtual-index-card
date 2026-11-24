@@ -1,4 +1,4 @@
-"""FastAPI application: accounts, card CRUD, and a durable shuffled deck."""
+"""FastAPI application: accounts, card management, and shuffled Review."""
 
 import time
 from dataclasses import asdict
@@ -202,7 +202,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "deck.html",
             {
                 "user": user,
-                "cards": repo.list_cards(connection, int(user["id"])),
+                "cards": repo.list_cards_newest_first(connection, int(user["id"])),
                 "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
             },
         )
