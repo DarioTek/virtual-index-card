@@ -1,39 +1,38 @@
-# Active plan: Review-only shuffle control and newest-first card management
+# Active plan: Raspberry Pi deployment instructions
 
-## Objective and scope
+## Objective
 
-The card-management page should show the latest-created card first and the oldest last. The shuffle control should be available in Review mode, not on the card-management page. The user's earlier requirement that shuffle order survive reloads still applies: Review uses persisted `position`, while management uses creation order independently. This is a refinement of archived `BL-025`; tracked here as `BL-026`.
+Document a reproducible Raspberry Pi OS deployment by cloning the repository into `/mnt/ssd/git/virtual-index-card`, running Gunicorn with an ASGI worker on `127.0.0.1:10001` under systemd, and proxying through Nginx with Certbot/Let's Encrypt HTTPS. Provide practical update, diagnostics, backup/restore and renewal guidance. No remote deployment is authorized.
 
-## Assumptions and risks
+## Scope / assumptions
 
-- “During the review session” means the shuffle action is exposed on the Review page, not that the saved order expires when the user leaves Review. No separate ephemeral session/order store is introduced.
-- `created_at` has second-level precision, so `id DESC` breaks timestamp ties to reliably show later inserts first. Edits must not reorder cards.
-- The existing authenticated CSRF-protected shuffle API remains the backing action; the UI starts at the first card of the new order after a shuffle. No database migration is required.
+- **In scope:** `docs/raspberry-pi-deployment.md`, README link, minimum locked runtime dependencies for the documented Gunicorn command, local smoke checks.
+- **Out of scope:** provisioning a real Pi/domain/SSD, changing app auth or SQLite schema, declaring `BL-013`, `BL-016`, `BL-022` or `BL-023` complete without security/deployment/restore verification. Those items remain open.
+- Assumes a Debian-based Raspberry Pi OS (64-bit recommended), Python 3.11+, working SSD mount and DNS name pointing to the Pi's public IP with forwarded TCP 80/443. The requested **10001 is the loopback app port**, not the browser HTTPS port (443). Certbot requires a real domain; no certificate is issued for a bare private IP.
+- Risk: published documentation is a recipe, not a tested deployment. Gunicorn is installed in the app's locked production environment; systemd uses the venv binary directly. SQLite must remain on persistent SSD storage outside `git` maintenance, with off-device backups and a tested restore before public exposure.
 
 ## Tasks
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Split repository reads into newest-first management and saved-order review; update routes | Completed |
-| 2 | Move shuffle button to Review and make it restart at the first shuffled card | Completed |
-| 3 | Add regression tests for page controls, ordering after create/edit/shuffle/reload, Review order and isolation | Completed |
-| 4 | Update user/architecture docs, run full validation and review diff; archive `BL-026` only after verification | Completed |
+| 1 | Check runtime/dependencies and plan secure topology and permissions | Completed |
+| 2 | Add and lock Gunicorn ASGI worker dependencies; validate install and local startup | Completed |
+| 3 | Write Pi guide for clone, systemd, Nginx, Certbot, backups/restore, updates, verification | Completed |
+| 4 | Update README, review commands/doc consistency, run tests and diff checks | Completed |
 
 ## Acceptance criteria
 
-- [x] The management page has no shuffle button, and newly created cards render first even after shuffle/reload; edits do not reorder cards.
-- [x] Review offers a shuffle button for a nonempty deck, shows one card at a time, and shuffle restarts Review at card 1 in the saved new order (source-inspected navigation; not browser-tested).
-- [x] A fresh login/reload preserves Review's shuffled order without changing the management page's newest-first sort.
-- [x] Authentication, CSRF and per-account isolation remain intact; the full pytest suite and `git diff --check` pass.
+- [x] Guide covers exact clone path, uv setup, production sync, service user and writable SQLite path, systemd Gunicorn on `127.0.0.1:10001`, Nginx proxy, Certbot certificate issuance/renewal, firewall/router prerequisites, validation, updates and troubleshooting.
+- [x] A locked install provides the exact worker and server executable in the guide; local Gunicorn /health smoke check passes.
+- [x] Backup/restore guidance avoids unsafe live file copies; public exposure is clearly gated on TLS, security review and tested off-device backups.
+- [x] `uv run pytest -q`, `git diff --check` and documentation review pass; real Pi/TLS/restore tests are explicitly unverified.
 
-## Validation strategy
+## Related backlog
 
-Use repository and FastAPI integration tests (`uv run pytest -q`), check generated markup and saved order after login with an independent client, and inspect `git diff --check` plus final status. JavaScript navigation is inspected statically; browser-based visual interaction is not part of this assignment.
+`BL-013` (pre-exposure security review), `BL-016` (repeatable deployment package), `BL-022` (HTTPS reverse-proxy deployment), and `BL-023` (automated backups/restore drill) remain Ready. This documentation slice does not meet their live-deployment acceptance criteria.
 
 ## Progress log
 
-- 2026-11-24: Read `AGENTS.md`, the old plan/backlog, architecture/decision docs, routes, repository, templates, JS and existing tests; working tree clean on `arena/bd203bc7-virtual-index-card`. Established the two independent ordering rules and started task 1.
-- Split reads in `repository.py`: management sorts `created_at DESC, id DESC`, Review retains persisted `position` order; `app.py` now chooses the right query per page. No schema changes.
-- Moved the shuffle button from `deck.html` to `review.html`, disabled for one card and omitted for none. `app.js` posts the existing authenticated/CSRF-protected shuffle action then navigates to `/review` (card 1); `styles.css` handles disabled and wrapping controls.
-- Updated `tests/test_app.py` and `tests/test_repository.py` for ordering, edit/shuffle independence, fresh-login Review order, button visibility and CSRF; updated `README.md`, `docs/architecture.md` and `docs/technical-decisions.md`. `uv run pytest -q`: 25 passed, 1 known Starlette/httpx deprecation warning. `node --check src/virtual_index_card/static/app.js` and `git diff --check`: passed. Browser visual/interaction check not run; JS navigation verified by source inspection.
-- Archived `BL-026` after validation in `docs/backlog-archive.md`; restored active backlog counts to 23 (8 Proposed, 12 Ready, 3 Deferred). No commit or push requested. Next: obtain user feedback or tackle a selected backlog item.
+- 2026-11-24: Reviewed repository instructions, active plan/backlog, architecture, runtime config and dependency manifest; clean branch `arena/bd203bc7-virtual-index-card`. Selected internal port 10001 behind Nginx 443 and explicit SQLite SSD permissions. No secrets or domain assumed.
+- Added `gunicorn` and `uvicorn-worker` with uv; updated `pyproject.toml` and `uv.lock`. `uv sync --no-dev --locked --python /usr/bin/python3` installed production dependencies; started the exact Gunicorn/ASGI command bound to loopback `:10001`, verified `/health` returned `{"status":"ok"}` and `/login` returned 200, then stopped it. Restored development dependencies with `uv sync --group dev --locked`.
+- Wrote `docs/raspberry-pi-deployment.md` with Pi setup, branch clone, service/SSD permissions, systemd, Nginx, Certbot, backups/restore, updates and diagnostics; linked it from `README.md`. `uv run pytest -q`: 25 passed, 1 existing Starlette/httpx deprecation warning. `git diff --check`: passed. Actual Pi installation, public DNS/TLS, renewal, threat review and backup restore drill were not run; `BL-013`, `BL-016`, `BL-022` and `BL-023` remain open. No commit, push or live deployment requested.

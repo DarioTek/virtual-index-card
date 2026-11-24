@@ -12,6 +12,8 @@ dependencies = [
     "uvicorn[standard]>=0.29,<1",
     "jinja2>=3.1,<4",
     "python-multipart>=0.0.9,<1",
+    "gunicorn>=23,<24",
+    "uvicorn-worker>=0.3,<1",
 ]
 
 [dependency-groups]

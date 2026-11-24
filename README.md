@@ -68,7 +68,7 @@ uv.lock           Locked dependency versions
 
 ## Deployment notes
 
-This release is not yet hardened for public hosting. HTTPS/reverse-proxy configuration (`BL-022`) and scheduled SQLite backups (`BL-023`) remain open. Set `VIC_COOKIE_SECURE=true` only when the app is served over HTTPS.
+See the [Raspberry Pi deployment runbook](docs/raspberry-pi-deployment.md) for cloning onto `/mnt/ssd/git/virtual-index-card`, running Gunicorn on loopback port **10001** under systemd, and putting Nginx/Certbot in front of it. The runbook has not been verified on a Pi: HTTPS/reverse-proxy validation (`BL-022`) and scheduled off-device SQLite backups with a restore drill (`BL-023`) remain open. Set `VIC_COOKIE_SECURE=true` only when the app is served over HTTPS.
 
 ## Documentation
 
@@ -76,5 +76,6 @@ This release is not yet hardened for public hosting. HTTPS/reverse-proxy configu
 - [`BACKLOG.md`](BACKLOG.md) — active future work.
 - [`docs/backlog-archive.md`](docs/backlog-archive.md) — completed work history.
 - [`docs/architecture.md`](docs/architecture.md) — as-built architecture.
+- [`docs/raspberry-pi-deployment.md`](docs/raspberry-pi-deployment.md) — Raspberry Pi operator runbook (not yet tested on a Pi).
 - [`docs/technical-decisions.md`](docs/technical-decisions.md) — decisions and rationale.
 - [`AGENTS.md`](AGENTS.md) — repository operating instructions.
