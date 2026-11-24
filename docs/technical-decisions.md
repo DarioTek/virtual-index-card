@@ -38,14 +38,14 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Multiple decks, Markdown/rich text.
 - **Consequences:** Smaller scope and reduced XSS surface.
 
-## TD-005: FastAPI, uv-style manifest, and pytest
+## TD-005: FastAPI with uv and pytest
 
 - **Date:** 2026-11-24
 - **Status:** Accepted
 - **Context:** `.gitignore` anticipated Python tooling; Python 3.11 is available and the app needs server rendering, an API, and SQLite.
-- **Decision:** Python 3.11+, FastAPI, Jinja2, `sqlite3`, `pyproject.toml`, pip/venv for this sandbox, and pytest with the Starlette test client.
+- **Decision:** Python 3.11+, FastAPI, Jinja2, `sqlite3`, `pyproject.toml` with `[dependency-groups]`, uv for environment/lockfile management, and pytest with the Starlette test client.
 - **Alternatives considered:** Node/Express with a SQLite driver; ORM-heavy framework.
-- **Consequences:** Few runtime dependencies; `uv` is not installed here, so README uses `python3 -m venv` plus pip. `pytest -q` passes with 20 tests.
+- **Consequences:** Few runtime dependencies and reproducible installs from committed `uv.lock`. `uv sync --group dev` and `uv run pytest -q` were verified with 20 passing tests.
 
 ## TD-006: Layered boundaries
 

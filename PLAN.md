@@ -8,7 +8,7 @@ Implement the first release of `virtual-index-card`: a hosted FastAPI web applic
 
 - Branch `arena/bd203bc7-virtual-index-card`, based on `d493534` (`baseline`).
 - Only control files, planning docs, and `.gitignore` existed; no source, manifest, database, or tests.
-- Python `3.11.2`, pip `23.0.1`, and Git `2.39.5` were available; `uv` was not installed.
+- Python `3.11.2` and Git `2.39.5` were available. `uv` was initially absent; `uv 0.13.9` was installed and adopted as the project tool on 2026-11-24.
 
 ## Decisions applied
 
@@ -17,9 +17,13 @@ Implement the first release of `virtual-index-card`: a hosted FastAPI web applic
 3. One deck per account, plain-text notes, durable shuffled order.
 4. CSRF protection, hashed passwords/session tokens, and user-scoped queries.
 
+## Tooling migration (2026-11-24)
+
+At the user's request, pip was replaced by uv for all project setup and commands. Dev dependencies moved from `[project.optional-dependencies]` to `[dependency-groups]`, `uv.lock` was generated and committed, and README/docs now use `uv sync --group dev` plus `uv run`. Verified with `uv run pytest -q` (20 passed).
+
 ## Scope delivered
 
-- `pyproject.toml`, package skeleton, and pip/venv install instructions.
+- `pyproject.toml`, package skeleton, uv-based install instructions, and committed `uv.lock`.
 - SQLite schema version 1 with `users`, `sessions`, and `cards` tables.
 - Account registration, login, logout, PBKDF2 hashing, server-side sessions, CSRF tokens.
 - Card CRUD and shuffle API; server-rendered deck page with CSS flip and JavaScript interactions.
@@ -45,6 +49,7 @@ Browser → FastAPI app → domain (Card, shuffle) → sqlite3 repository → SQ
 |---|---|---|---|
 | 1–9 | Inspection, planning, and decision rounds | Completed | Control files and docs updated. |
 | 10 | Tooling bootstrap | Completed | `pyproject.toml`, `.venv`, `src/`, `tests/`; dependencies installed. |
+| 17 | Migrate tooling from pip to uv | Completed | `[dependency-groups]`, `uv.lock`, README and docs switched to `uv sync` / `uv run`. |
 | 11 | Domain and SQLite persistence | Completed | `config.py`, `db.py`, `domain.py`, `repository.py`. |
 | 12 | Authentication and session layer | Completed | `security.py`, account routes, templates, CSRF. |
 | 13 | Card API | Completed | CRUD + shuffle with auth and CSRF. |
@@ -70,9 +75,10 @@ Browser → FastAPI app → domain (Card, shuffle) → sqlite3 repository → SQ
 
 ## Validation and results
 
-- `.venv/bin/python -m pip install -e '.[dev]'` — succeeded; added `python-multipart` after FastAPI reported it required for form parsing.
-- `.venv/bin/pytest -q` — **20 passed**, 1 Starlette/httpx deprecation warning. An initial shuffle-order assertion failed because the test matched `aria-label` text; the test was corrected to compare `data-card-id` order.
-- Live server: `VIC_DATABASE_PATH=... .venv/bin/uvicorn virtual_index_card.app:app --host 0.0.0.0 --port 8000` — started successfully. `curl` smoke test confirmed health check, unauthenticated redirect, registration, deck rendering, CSRF rejection (403), card creation, shuffle, reload order, and logout.
+- Initial install used pip and exposed a missing `python-multipart` dependency; it is now declared in `pyproject.toml`.
+- `uv lock` — resolved 33 packages and created `uv.lock`; `uv sync --group dev` — created a fresh `.venv` and installed all dependencies.
+- `uv run pytest -q` — **20 passed**, 1 Starlette/httpx deprecation warning. An initial shuffle-order assertion failed because the test matched `aria-label` text; the test was corrected to compare `data-card-id` order.
+- Live server: `VIC_DATABASE_PATH=... uv run uvicorn virtual_index_card.app:app --host 0.0.0.0 --port 8000` — started successfully. `curl` smoke test confirmed health check, unauthenticated redirect, registration, deck rendering, CSRF rejection (403), card creation, shuffle, reload order, and logout.
 - `git diff --check` — passed with no whitespace errors.
 - Not run: browser-based visual inspection, HTTPS deployment, backup restore drill, CI.
 

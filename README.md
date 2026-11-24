@@ -14,20 +14,21 @@ All durable data — accounts, sessions, cards, and card order — is stored in 
 
 ## Prerequisites
 
-- Python 3.11 or newer with `venv` and `pip`.
+- Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
 
 ## Install
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
+uv sync --group dev
 ```
+
+This creates `.venv` and installs the locked dependencies from `uv.lock`.
 
 ## Run locally
 
 ```bash
 VIC_DATABASE_PATH=./data/virtual-index-card.sqlite3 \
-  .venv/bin/uvicorn virtual_index_card.app:app --reload --host 127.0.0.1 --port 8000
+  uv run uvicorn virtual_index_card.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open <http://127.0.0.1:8000> and create an account. The SQLite file is created automatically on first start and is ignored by Git.
@@ -43,10 +44,10 @@ Configuration (all optional):
 ## Test
 
 ```bash
-.venv/bin/pytest -q
+uv run pytest -q
 ```
 
-Verified on 2026-11-24: **20 passed**, 1 Starlette/httpx deprecation warning.
+Verified on 2026-11-24 with `uv`: **20 passed**, 1 Starlette/httpx deprecation warning.
 
 ## Project layout
 
@@ -61,6 +62,7 @@ src/virtual_index_card/
   templates/      Jinja pages
   static/         CSS flip interaction and JavaScript
 tests/            Unit and integration tests
+uv.lock           Locked dependency versions
 ```
 
 ## Deployment notes

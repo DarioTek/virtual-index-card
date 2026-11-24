@@ -78,13 +78,13 @@ Indexes cover session expiry and `(user_id, position)`. Foreign keys are enabled
 
 ## Runtime and deployment
 
-Run with `uvicorn virtual_index_card.app:app`. The database path is configurable; the parent directory is created automatically. The first start creates the schema; a mismatched `PRAGMA user_version` raises an actionable error.
+Run with `uv run uvicorn virtual_index_card.app:app` after `uv sync --group dev`. The database path is configurable; the parent directory is created automatically. The first start creates the schema; a mismatched `PRAGMA user_version` raises an actionable error.
 
 HTTPS/reverse proxy, production secrets management, and scheduled backups are **not yet implemented** and are tracked as `BL-022` and `BL-023`. Do not expose this app publicly until those are complete.
 
 ## Testing
 
-`pytest -q` runs 20 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, persistence, shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
+`uv run pytest -q` runs 20 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, persistence, shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
 
 ## Known limitations
 
