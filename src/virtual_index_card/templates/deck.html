@@ -6,7 +6,10 @@
     <h1>My deck</h1>
     <p class="card-count">{{ cards|length }} card{% if cards|length != 1 %}s{% endif %}</p>
   </div>
-  <button type="button" id="shuffle-btn" class="secondary">Shuffle deck</button>
+  <div class="deck-actions">
+    <a class="secondary link-button" href="/review">Review mode</a>
+    <button type="button" id="shuffle-btn" class="secondary">Shuffle deck</button>
+  </div>
 </section>
 
 <section class="editor" aria-labelledby="new-card-heading">

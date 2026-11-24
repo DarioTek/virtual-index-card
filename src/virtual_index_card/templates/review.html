@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Review · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="review-header">
+  <div>
+    <h1>Review</h1>
+    {% if card %}
+    <p class="card-count">Card {{ position + 1 }} of {{ total }}</p>
+    {% else %}
+    <p class="card-count">No cards to review</p>
+    {% endif %}
+  </div>
+  <a class="secondary link-button" href="/">Back to deck</a>
+</section>
+
+{% if card %}
+<section class="review-stage">
+  <article class="card review-card" data-card-id="{{ card.id }}">
+    <button type="button" class="flip-button" aria-pressed="false"
+            aria-label="Flip card to see the back">
+      <span class="card-inner">
+        <span class="card-face card-front">{{ card.front }}</span>
+        <span class="card-face card-back">{{ card.back }}</span>
+      </span>
+    </button>
+    <p class="flip-hint">Tap the card to flip it.</p>
+  </article>
+  <nav class="review-nav" aria-label="Review navigation">
+    <a id="review-prev" class="secondary link-button" href="/review?index={{ prev_index }}" rel="prev">← Previous</a>
+    <a id="review-next" class="secondary link-button" href="/review?index={{ next_index }}" rel="next">Next →</a>
+  </nav>
+  <p class="review-tip">Tip: use the left and right arrow keys to move between cards.</p>
+</section>
+{% else %}
+<section class="empty-review">
+  <p>Add some cards to your deck before reviewing.</p>
+  <a class="link-button" href="/">Go to deck</a>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='/app.js') }}" defer></script>
+{% endblock %}

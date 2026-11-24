@@ -94,3 +94,13 @@ document.addEventListener('click', (event) => {
     reloadAfter(apiRequest(`/api/cards/${card.dataset.cardId}`, { method: 'DELETE' }));
   }
 });
+
+const reviewNext = document.getElementById('review-next');
+const reviewPrev = document.getElementById('review-prev');
+if (reviewNext || reviewPrev) {
+  document.addEventListener('keydown', (event) => {
+    if (event.target.matches('input, textarea')) return;
+    if (event.key === 'ArrowRight' && reviewNext) reviewNext.click();
+    if (event.key === 'ArrowLeft' && reviewPrev) reviewPrev.click();
+  });
+}

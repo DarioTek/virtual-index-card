@@ -56,6 +56,7 @@ Indexes cover session expiry and `(user_id, position)`. Foreign keys are enabled
 | `GET`/`POST` | `/login` | Login form / start session | None |
 | `POST` | `/logout` | End session | Session + CSRF form token |
 | `GET` | `/` | Deck page | Session |
+| `GET` | `/review?index=N` | Single-card Review mode | Session |
 | `POST` | `/api/cards` | Create card | Session + `X-CSRF-Token` |
 | `PATCH` | `/api/cards/{id}` | Edit card | Session + CSRF |
 | `DELETE` | `/api/cards/{id}` | Delete card | Session + CSRF |
@@ -67,6 +68,7 @@ Indexes cover session expiry and `(user_id, position)`. Foreign keys are enabled
 2. **Flip:** the card's button toggles `aria-pressed` and a CSS class; the 3D transform reveals the back face. No server call.
 3. **CRUD:** JavaScript sends JSON with the CSRF header; the route validates text, writes through the repository, and the page reloads from server-rendered state.
 4. **Shuffle:** `shuffled_cards()` reorders with Fisher–Yates, positions are rewritten in one transaction, and the page re-renders in the saved order. Reload uses the same order.
+5. **Review:** `/review` reads the same saved order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links wrap around; arrow keys also navigate. No server call is needed to flip.
 
 ## Security posture
 
@@ -84,7 +86,7 @@ HTTPS/reverse proxy, production secrets management, and scheduled backups are **
 
 ## Testing
 
-`uv run pytest -q` runs 20 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, persistence, shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
+`uv run pytest -q` runs 24 tests: domain/shuffle invariants, password/token helpers, repository isolation, and FastAPI integration coverage for registration, login/logout, CSRF, CRUD, persistence, shuffle, and account separation. A live `uvicorn` smoke test also verified the main flows with `curl`.
 
 ## Known limitations
 

@@ -207,6 +207,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/review", response_class=HTMLResponse, tags=["ui"])
+    def review_page(
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+        index: int = 0,
+    ) -> Response:
+        user = current_user(request, connection)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        cards = repo.list_cards(connection, int(user["id"]))
+        total = len(cards)
+        position = index % total if total else 0
+        return templates.TemplateResponse(
+            request,
+            "review.html",
+            {
+                "user": user,
+                "card": cards[position] if cards else None,
+                "position": position,
+                "total": total,
+                "prev_index": (position - 1) % total if total else 0,
+                "next_index": (position + 1) % total if total else 0,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+        )
+
     # --- Card API -----------------------------------------------------------
 
     @app.post("/api/cards", status_code=status.HTTP_201_CREATED, tags=["cards"])

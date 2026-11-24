@@ -9,6 +9,7 @@ All durable data — accounts, sessions, cards, and card order — is stored in 
 - Individual accounts with registration, login, and logout.
 - Per-account decks: one user cannot see or modify another user's cards.
 - Add, edit, delete, flip, and shuffle cards.
+- Review mode: one card at a time, tap to flip, and cycle through the deck.
 - Plain-text notes with safe HTML escaping.
 - CSRF-protected writes and hashed passwords/session tokens.
 
@@ -47,7 +48,7 @@ Configuration (all optional):
 uv run pytest -q
 ```
 
-Verified on 2026-11-24 with `uv`: **20 passed**, 1 Starlette/httpx deprecation warning.
+Verified on 2026-11-24 with `uv`: **24 passed**, 1 Starlette/httpx deprecation warning.
 
 ## Project layout
 

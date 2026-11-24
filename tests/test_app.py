@@ -180,3 +180,65 @@ def test_passwords_are_not_stored_in_plain_text(
     assert row is not None
     assert "correct horse battery" not in row[0]
     assert "correct horse battery" not in row[1]
+
+
+def add_card(client: TestClient, front: str, back: str) -> int:
+    response = client.post(
+        "/api/cards",
+        json={"front": front, "back": back},
+        headers=csrf_headers(client),
+    )
+    assert response.status_code == 201
+    return response.json()["card"]["id"]
+
+
+def test_review_requires_authentication(client: TestClient) -> None:
+    response = client.get("/review", follow_redirects=False)
+    assert response.headers["location"] == "/login"
+
+
+def test_review_shows_one_card_and_cycles(client: TestClient) -> None:
+    register(client, "alice")
+    ids = [add_card(client, f"front {index}", f"back {index}") for index in range(3)]
+
+    page = client.get("/review")
+    assert page.status_code == 200
+    assert "Card 1 of 3" in page.text
+    assert [int(value) for value in re.findall(r'data-card-id="(\d+)"', page.text)] == [ids[0]]
+    assert 'aria-pressed="false"' in page.text
+    assert "front 0" in page.text
+    assert "back 0" in page.text
+
+    second = client.get("/review?index=1")
+    assert "Card 2 of 3" in second.text
+    assert [int(value) for value in re.findall(r'data-card-id="(\d+)"', second.text)] == [ids[1]]
+
+    wrap_forward = client.get("/review?index=3")
+    assert "Card 1 of 3" in wrap_forward.text
+
+    wrap_backward = client.get("/review?index=-1")
+    assert "Card 3 of 3" in wrap_backward.text
+
+
+def test_review_empty_deck_shows_empty_state(client: TestClient) -> None:
+    register(client, "alice")
+    page = client.get("/review")
+    assert page.status_code == 200
+    assert "No cards to review" in page.text
+    assert "Add some cards to your deck" in page.text
+
+
+def test_review_shows_only_the_signed_in_accounts_cards(
+    settings: Settings, client: TestClient
+) -> None:
+    register(client, "alice")
+    add_card(client, "alice front", "alice back")
+
+    other = TestClient(create_app(settings))
+    register(other, "bob")
+    add_card(other, "bob front", "bob back")
+
+    page = other.get("/review")
+    assert "bob front" in page.text
+    assert "alice front" not in page.text
+    assert "Card 1 of 1" in page.text
