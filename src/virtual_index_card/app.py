@@ -185,6 +185,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=status_code,
         )
 
+    def render_admin_profile(
+        request: Request,
+        user: object,
+        error: str | None = None,
+        saved: str | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "admin_profile.html",
+            {
+                "user": user,
+                "error": error,
+                "saved": saved,
+                "env_admin_pinned": bool(request.app.state.settings.admin_password),
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+            status_code=status_code,
+        )
+
     def render_credentials(
         request: Request,
         user: object,
@@ -473,6 +493,79 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with connection:
             repo.delete_user(connection, user_id)
         return RedirectResponse("/admin/users", status_code=303)
+
+    # --- Administrator: own profile ------------------------------------------
+
+    @app.get("/admin/profile", response_class=HTMLResponse, tags=["admin"])
+    def admin_profile_page(
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+    ) -> Response:
+        user = current_user(request, connection)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required.")
+        saved = request.query_params.get("saved")
+        if saved not in ("updated", "nothing"):
+            saved = None
+        return render_admin_profile(request, user, saved=saved)
+
+    @app.post("/admin/profile", tags=["admin"])
+    def admin_profile_update(
+        request: Request,
+        username: Annotated[str, Form()],
+        current_password: Annotated[str, Form()],
+        admin: Annotated[object, Depends(require_admin)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        new_password: Annotated[str, Form()] = "",
+        confirm_password: Annotated[str, Form()] = "",
+        csrf_token: Annotated[str, Form()] = "",
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        error: str | None = None
+        if not verify_password(current_password, admin["salt"], admin["password_hash"]):
+            error = "Current password is incorrect."
+
+        username = username.strip()
+        username_changed = username != admin["username"]
+        if error is None and username_changed:
+            if not username:
+                error = "Username must not be empty."
+            else:
+                username_error = validate_username(username)
+                if username_error is not None:
+                    error = username_error
+                elif username.lower() != admin["username"].lower():
+                    existing = repo.get_user_by_username(connection, username)
+                    if existing is not None and int(existing["id"]) != int(admin["id"]):
+                        error = "That username is already taken."
+
+        password_changed = bool(new_password)
+        if error is None and password_changed:
+            password_error = validate_password(new_password)
+            if password_error is not None:
+                error = password_error
+            elif new_password != confirm_password:
+                error = "The new passwords do not match."
+
+        if error is not None:
+            return render_admin_profile(request, admin, error=error, status_code=400)
+        if not username_changed and not password_changed:
+            return RedirectResponse("/admin/profile?saved=nothing", status_code=303)
+
+        with connection:
+            if username_changed:
+                repo.update_username(connection, int(admin["id"]), username)
+            if password_changed:
+                salt, digest = hash_password(new_password)
+                repo.set_user_password(connection, int(admin["id"]), salt, digest)
+                repo.delete_user_sessions_except(
+                    connection,
+                    int(admin["id"]),
+                    request.cookies.get(SESSION_COOKIE) or "",
+                )
+        return RedirectResponse("/admin/profile?saved=updated", status_code=303)
 
     # --- Deck page ----------------------------------------------------------
 

@@ -718,3 +718,206 @@ def test_reset_password_works_for_user_not_created_by_approval(
         follow_redirects=False,
     )
     assert new_login.status_code == 303
+
+
+# --- Administrator: own profile (/admin/profile) -----------------------------
+
+
+def test_admin_profile_requires_administrator(client: TestClient) -> None:
+    anonymous = client.get("/admin/profile", follow_redirects=False)
+    assert anonymous.status_code == 303
+    assert anonymous.headers["location"] == "/login"
+
+    register(client, "alice")
+    assert client.get("/admin/profile").status_code == 403
+    assert 'href="/admin/profile"' not in client.get("/").text
+
+
+def test_admin_profile_shows_current_username(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    page = admin.get("/admin/profile")
+    assert page.status_code == 200
+    assert 'value="admin"' in page.text
+    assert 'href="/admin/profile"' in admin.get("/").text
+
+
+def test_change_username_keeps_session_and_rename(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "boss2",
+            "current_password": "admin-password-123",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    assert admin.get("/").status_code == 200
+    assert "boss2" in admin.get("/").text
+
+    new_client = TestClient(create_app(settings))
+    old_login = new_client.post(
+        "/login",
+        data={"username": "admin", "password": "admin-password-123"},
+        follow_redirects=False,
+    )
+    assert old_login.status_code == 401
+    new_login = new_client.post(
+        "/login",
+        data={"username": "boss2", "password": "admin-password-123"},
+        follow_redirects=False,
+    )
+    assert new_login.status_code == 303
+
+
+def test_change_username_case_only_is_allowed(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "ADMIN",
+            "current_password": "admin-password-123",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def test_change_username_must_be_unique(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "ALICE",
+            "current_password": "admin-password-123",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+    )
+    assert response.status_code == 400
+    assert "already taken" in response.text
+
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE username = 'admin'"
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
+def test_change_password_invalidates_other_sessions(
+    client: TestClient, settings: Settings
+) -> None:
+    admin_one = admin_client(settings)
+    admin_two = admin_client(settings)
+    response = admin_one.post(
+        "/admin/profile",
+        data={
+            "username": "admin",
+            "current_password": "admin-password-123",
+            "new_password": "brand-new-admin-1",
+            "confirm_password": "brand-new-admin-1",
+            "csrf_token": admin_one.cookies.get("vic_csrf"),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    # Current session survives; the other session is signed out.
+    assert admin_one.get("/").status_code == 200
+    assert admin_two.get("/", follow_redirects=False).headers["location"] == "/login"
+
+    old_login = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin-password-123"},
+        follow_redirects=False,
+    )
+    assert old_login.status_code == 401
+    new_login = client.post(
+        "/login",
+        data={"username": "admin", "password": "brand-new-admin-1"},
+        follow_redirects=False,
+    )
+    assert new_login.status_code == 303
+
+
+def test_profile_wrong_current_password_changes_nothing(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "boss2",
+            "current_password": "wrong-password-1",
+            "new_password": "brand-new-admin-1",
+            "confirm_password": "brand-new-admin-1",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+    )
+    assert response.status_code == 400
+    assert "Current password is incorrect" in response.text
+
+    verify = TestClient(create_app(settings))
+    login = verify.post(
+        "/login",
+        data={"username": "admin", "password": "admin-password-123"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+
+
+def test_profile_password_confirmation_must_match(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "admin",
+            "current_password": "admin-password-123",
+            "new_password": "brand-new-admin-1",
+            "confirm_password": "different-admin-1",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+    )
+    assert response.status_code == 400
+    assert "do not match" in response.text
+
+
+def test_profile_requires_csrf(client: TestClient, settings: Settings) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={"username": "boss2", "current_password": "admin-password-123"},
+    )
+    assert response.status_code == 403
+
+
+def test_profile_no_changes_reports_nothing(
+    client: TestClient, settings: Settings
+) -> None:
+    admin = admin_client(settings)
+    response = admin.post(
+        "/admin/profile",
+        data={
+            "username": "admin",
+            "current_password": "admin-password-123",
+            "csrf_token": admin.cookies.get("vic_csrf"),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/profile?saved=nothing"

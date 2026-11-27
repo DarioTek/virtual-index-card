@@ -92,6 +92,15 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Soft-delete/undo; deleting admin accounts from the UI with a last-admin guard; full-text search/pagination (deferred — the audience is small).
 - **Consequences:** Revocation no longer requires shell access. Destructive deletes are one click past a browser confirm; backups (`BL-023`) remain the recovery path. No schema change was needed.
 
+## TD-011: Admin profile page with session-safe password change
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Administrators had no self-service way to rename their account or rotate their password (the only path was out-of-band `create_admin`).
+- **Decision:** Add `/admin/profile` (admin-only) with a single form: username, current password (required for any change), new password + confirmation (blank = keep current). Username uniqueness is enforced case-insensitively with a case-only change allowed; sessions survive a rename (they key on `user_id`). A password change deletes every session for that account **except the current one**, and audit joins read live usernames so history stays correct. When `VIC_ADMIN_PASSWORD` is set, the page warns that a restart re-pins the password. The requester-chosen delivery model (TD-009) is unchanged for ordinary accounts.
+- **Alternatives considered:** Separate username/password forms; signing out all sessions including the current one (rejected: forces re-login for a routine change); making the profile page available to all users now (deferred — the ask was the admin role; regular accounts keep the admin-reset path).
+- **Consequences:** Administrators can rotate credentials without shell access. An attacker with the admin's session still cannot change the password without the current password. `VIC_ADMIN_PASSWORD` re-pinning remains a possible surprise, mitigated by the in-page warning.
+
 ## Superseded decisions
 
 - Browser-only static app with `localStorage`.

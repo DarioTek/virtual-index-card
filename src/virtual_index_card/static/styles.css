@@ -331,3 +331,9 @@ textarea, input {
 .badge-user { color: var(--muted); border-color: var(--line); background: #f3f1ea; }
 .reset-form, .delete-form { display: inline-block; margin: 0 0 0 0.35rem; }
 .user-actions { white-space: nowrap; }
+
+.notice-warning {
+  border-color: #c8b45a;
+  background: #faf3d8;
+  color: #6b5b12;
+}

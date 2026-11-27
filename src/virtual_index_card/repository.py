@@ -72,6 +72,13 @@ def set_user_password(
     return cursor.rowcount > 0
 
 
+def update_username(connection: sqlite3.Connection, user_id: int, username: str) -> bool:
+    cursor = connection.execute(
+        "UPDATE users SET username = ? WHERE id = ?", (username, user_id)
+    )
+    return cursor.rowcount > 0
+
+
 def count_admins(connection: sqlite3.Connection) -> int:
     row = connection.execute(
         "SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"
@@ -216,6 +223,16 @@ def delete_session(connection: sqlite3.Connection, token: str) -> None:
 
 def delete_user_sessions(connection: sqlite3.Connection, user_id: int) -> int:
     cursor = connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return cursor.rowcount
+
+
+def delete_user_sessions_except(
+    connection: sqlite3.Connection, user_id: int, keep_token: str
+) -> int:
+    cursor = connection.execute(
+        "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",
+        (user_id, hash_token(keep_token)),
+    )
     return cursor.rowcount
 
 

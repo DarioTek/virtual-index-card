@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Admin profile · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="admin-header">
+  <div>
+    <h1>Admin profile</h1>
+    <p class="card-count">Signed in as {{ user['username'] }} · <a href="/admin/requests">Requests</a> · <a href="/admin/users">Users</a></p>
+  </div>
+</section>
+
+{% if saved == 'updated' %}<p class="form-notice" role="status">Profile updated.</p>{% endif %}
+{% if saved == 'nothing' %}<p class="form-notice" role="status">No changes were made.</p>{% endif %}
+{% if env_admin_pinned %}<p class="form-notice notice-warning" role="alert"><code>VIC_ADMIN_PASSWORD</code> is set in the environment: restarting the application will reset this account's password to that value. Unset it once you no longer need the bootstrap.</p>{% endif %}
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="admin-panel credentials-panel" aria-labelledby="profile-heading">
+  <h2 id="profile-heading">Account settings</h2>
+  <form method="post" action="/admin/profile" class="auth-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" required minlength="3" maxlength="30"
+           pattern="[A-Za-z0-9_-]+" autocomplete="username" value="{{ user['username'] }}">
+
+    <label for="current_password">Current password</label>
+    <input id="current_password" name="current_password" type="password" required
+           autocomplete="current-password">
+
+    <label for="new_password">New password <span class="optional">(leave blank to keep the current one)</span></label>
+    <input id="new_password" name="new_password" type="password" minlength="8" maxlength="128"
+           autocomplete="new-password">
+
+    <label for="confirm_password">Confirm new password</label>
+    <input id="confirm_password" name="confirm_password" type="password" maxlength="128"
+           autocomplete="new-password">
+
+    <button type="submit">Save changes</button>
+  </form>
+  <p class="card-count">The current password is required for any change. Changing the password
+     signs out your other sessions.</p>
+</section>
+{% endblock %}
