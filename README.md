@@ -1,6 +1,6 @@
 # virtual-index-card
 
-A hosted web application for personal index cards. Each approved account can create multiple private decks, named sequentially by default (`My Deck 1`, `My Deck 2`, ...). Write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the selected deck, and that review order persists across reloads.
+A hosted web application for personal index cards. Each approved account can create multiple private decks, named sequentially by default (`My Deck 1`, `My Deck 2`, ...), or give them unique custom names and rename them later. Write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the selected deck, and that review order persists across reloads.
 
 New accounts are **created by an administrator**: visitors submit an account request, an administrator approves it, and the system issues the account name and password to hand to the user.
 

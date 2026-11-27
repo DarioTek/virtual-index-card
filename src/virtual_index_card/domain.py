@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Sequence
 
 MAX_NOTE_LENGTH = 5000
+MAX_DECK_NAME_LENGTH = 100
 USERNAME_MIN = 3
 USERNAME_MAX = 30
 PASSWORD_MIN = 8
@@ -55,6 +56,18 @@ def clean_note(value: str, field: str) -> str:
     if len(text) > MAX_NOTE_LENGTH:
         raise ValidationError(f"{field} must be at most {MAX_NOTE_LENGTH} characters.")
     return text
+
+
+def clean_deck_name(value: str) -> str:
+    """Return a trimmed, valid deck name."""
+    name = value.strip()
+    if not name:
+        raise ValidationError("Deck name must not be empty.")
+    if len(name) > MAX_DECK_NAME_LENGTH:
+        raise ValidationError(
+            f"Deck name must be at most {MAX_DECK_NAME_LENGTH} characters."
+        )
+    return name
 
 
 def shuffled_cards(cards: Sequence[Card], rng: random.Random | None = None) -> list[Card]:

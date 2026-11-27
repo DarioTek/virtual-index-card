@@ -13,6 +13,10 @@ class UsernameTaken(Exception):
     """Raised when a registration username already exists."""
 
 
+class DeckNameTaken(Exception):
+    """Raised when an account already has a case-insensitively equal deck name."""
+
+
 VALID_ROLES = ("admin", "user")
 VALID_REQUEST_STATUSES = ("pending", "approved", "rejected")
 
@@ -263,21 +267,55 @@ def get_deck(
     ).fetchone()
 
 
+def _next_generated_deck_name(
+    connection: sqlite3.Connection, user_id: int
+) -> str:
+    prefix = "My Deck "
+    highest = 0
+    for row in connection.execute(
+        "SELECT name FROM decks WHERE user_id = ?", (user_id,)
+    ):
+        name = str(row["name"])
+        suffix = name[len(prefix) :] if name.startswith(prefix) else ""
+        if suffix.isdigit():
+            highest = max(highest, int(suffix))
+    return f"{prefix}{highest + 1}"
+
+
 def create_deck(
-    connection: sqlite3.Connection, user_id: int, created_at: str
+    connection: sqlite3.Connection,
+    user_id: int,
+    created_at: str,
+    name: str | None = None,
 ) -> sqlite3.Row:
-    """Create the next sequentially named deck for an account."""
-    cursor = connection.execute(
-        """
-        INSERT INTO decks (user_id, name, created_at)
-        SELECT ?, 'My Deck ' || (COUNT(*) + 1), ?
-        FROM decks WHERE user_id = ?
-        """,
-        (user_id, created_at, user_id),
-    )
+    """Create a custom-named deck or the next sequentially named deck."""
+    deck_name = name if name is not None else _next_generated_deck_name(connection, user_id)
+    try:
+        cursor = connection.execute(
+            "INSERT INTO decks (user_id, name, created_at) VALUES (?, ?, ?)",
+            (user_id, deck_name, created_at),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise DeckNameTaken(f"A deck named {deck_name!r} already exists.") from exc
     deck = get_deck(connection, user_id, int(cursor.lastrowid))
     assert deck is not None
     return deck
+
+
+def rename_deck(
+    connection: sqlite3.Connection, user_id: int, deck_id: int, name: str
+) -> sqlite3.Row | None:
+    """Rename an account-owned deck without changing its contents or order."""
+    try:
+        cursor = connection.execute(
+            "UPDATE decks SET name = ? WHERE user_id = ? AND id = ?",
+            (name, user_id, deck_id),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise DeckNameTaken(f"A deck named {name!r} already exists.") from exc
+    if cursor.rowcount == 0:
+        return None
+    return get_deck(connection, user_id, deck_id)
 
 
 # --- Cards -----------------------------------------------------------------

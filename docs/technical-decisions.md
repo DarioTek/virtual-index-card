@@ -110,6 +110,15 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Keep one deck; prompt for a custom name at creation; migrate existing data to a differently named default; use a separate deck-specific page hierarchy.
 - **Consequences:** Schema v3 associates cards with both their owner and deck. The v2 → v3 migration preserves existing card records and saved ordering. Deck-specific queries and API paths must validate ownership on every request.
 
+## TD-013: Account-local custom deck names and rename
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Issue #2 extends generated deck names so users can identify topic-specific decks and correct names later without disturbing their cards.
+- **Decision:** Allow an optional custom name during deck creation and allow owners to rename existing decks. Trim names, require 1–100 characters, and enforce case-insensitive uniqueness per account with the existing database constraint. A blank create field retains generated `My Deck N` behavior; generated numbering advances beyond the highest existing numeric suffix. Rename changes only `decks.name`, so card identity, timestamps, and persisted Review order remain unchanged. Foreign deck IDs return 404.
+- **Alternatives considered:** Require custom names for every new deck; allow duplicates; store rename history; make renaming create a replacement deck.
+- **Consequences:** Deck labels become meaningful without changing deck identity or card relationships. Concurrent conflicting writes cannot create duplicates because SQLite remains authoritative; callers receive a validation error instead. Delete, sharing, and import/export remain tracked by #3–#5.
+
 ## Superseded decisions
 
 - Browser-only static app with `localStorage`.

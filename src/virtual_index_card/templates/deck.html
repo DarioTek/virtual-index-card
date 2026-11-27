@@ -18,11 +18,21 @@
     </form>
     <form method="post" action="/decks" class="new-deck-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="current_deck_id" value="{{ deck['id'] }}">
+      <label for="new-deck-name">New deck name <span class="muted">(optional)</span></label>
+      <input id="new-deck-name" name="name" maxlength="100" placeholder="Leave blank for the next My Deck number">
       <button type="submit">Create deck</button>
+    </form>
+    <form method="post" action="/decks/{{ deck['id'] }}/rename" class="new-deck-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="rename-deck">Rename current deck</label>
+      <input id="rename-deck" name="name" maxlength="100" value="{{ deck['name'] }}" required>
+      <button type="submit" class="secondary">Rename</button>
     </form>
     <a class="secondary link-button" href="/review?deck_id={{ deck['id'] }}">Review mode</a>
   </div>
 </section>
+{% if deck_error %}<p class="form-error" role="alert">{{ deck_error }}</p>{% endif %}
 
 <section class="editor" aria-labelledby="new-card-heading">
   <h2 id="new-card-heading">Add a card</h2>
