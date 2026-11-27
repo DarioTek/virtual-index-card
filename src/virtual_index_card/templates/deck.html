@@ -26,7 +26,7 @@
 
 <section class="editor" aria-labelledby="new-card-heading">
   <h2 id="new-card-heading">Add a card</h2>
-  <form id="create-form" class="card-form">
+  <form id="create-form" class="card-form" data-deck-id="{{ deck['id'] }}">
     <label for="new-front">Front</label>
     <textarea id="new-front" name="front" rows="3" maxlength="5000" required
               placeholder="Question or prompt"></textarea>
@@ -66,5 +66,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', path='/app.js') }}" defer></script>
+<script src="{{ url_for('static', path='/app.js') }}?v=deck-context-1" defer></script>
 {% endblock %}

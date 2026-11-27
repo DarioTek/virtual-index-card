@@ -134,6 +134,8 @@ def test_users_can_create_and_select_independent_decks(client: TestClient) -> No
     second_deck_id = int(created.headers["location"].split("deck_id=")[1])
     second_page = client.get(created.headers["location"])
     assert "My Deck 2" in second_page.text
+    assert f'id="create-form" class="card-form" data-deck-id="{second_deck_id}"' in second_page.text
+    assert "app.js?v=deck-context-1" in second_page.text
     assert "first-deck card" not in second_page.text
     second_card_response = client.post(
         f"/api/cards?deck_id={second_deck_id}",

@@ -1,5 +1,7 @@
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-const selectedDeckId = document.querySelector('[data-deck-id]')?.dataset.deckId;
+const createForm = document.getElementById('create-form');
+const selectedDeckId =
+  createForm?.dataset.deckId || document.querySelector('.review-stage')?.dataset.deckId;
 const deckQuery = selectedDeckId ? `?deck_id=${encodeURIComponent(selectedDeckId)}` : '';
 
 async function apiRequest(path, options = {}) {
@@ -34,7 +36,7 @@ function reloadAfter(promise) {
   promise.then(() => window.location.reload()).catch((error) => window.alert(error.message));
 }
 
-document.getElementById('create-form')?.addEventListener('submit', (event) => {
+createForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const payload = {

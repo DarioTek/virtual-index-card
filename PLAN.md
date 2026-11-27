@@ -24,6 +24,7 @@ Implement support for each account to create and select multiple independent car
 | 5 | Add migration, multi-deck, isolation, and regression tests | In Progress |
 | 6 | Update README, architecture, and technical decision documentation | Completed |
 | 7 | Run available validations and review diff | Blocked |
+| 8 | Fix regression: card creation from a non-default selected deck | Completed |
 
 ## Acceptance criteria
 
@@ -85,4 +86,5 @@ Drafts only; no GitHub Issues created or modified.
 - 2026-11-27: Issue #1 implementation authorized. User confirmed sequential `My Deck 1`, `My Deck 2`, ... default names. Scope set to deck creation and selection; rename/delete are deferred.
 - 2026-11-27: Implemented schema v3 and v2→v3 migration, account-owned deck persistence, deck selector/create form, selected-deck card and Review operations, and regression tests. Existing schema-v2 cards retain IDs, content, timestamps, and positions in `My Deck 1`.
 - 2026-11-27: `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check` passed. Manual SQLite/repository smoke checks passed for fresh schema, sequential naming, ownership isolation, v1→v3 and v2→v3 migrations, data/order preservation, foreign keys, and post-migration card ID continuation.
-- 2026-11-27: Full pytest suite not run: `uv`, pytest, FastAPI, and httpx are absent. Dependencies were not installed. Runtime HTTP/template integration remains unverified; task 5 and task 7 remain open/blocked pending a test-capable environment.
+- 2026-11-27: User reported cards created from `My Deck 2` were landing in `My Deck 1`. The cards API intentionally falls back to the first deck when `deck_id` is omitted, so the client must always send the selected deck explicitly. Bound the create form directly to its selected `deck_id`, use that form context in JavaScript, and version the static script URL to avoid a stale cached client. Added a regression assertion for rendered deck context.
+- 2026-11-27: `node --check` and a Node harness simulating the form submit passed; the request was `/api/cards?deck_id=2`. Python compilation and `git diff --check` passed. Full pytest remains unavailable because `uv`, pytest, FastAPI, and httpx are absent; dependencies were not installed. Runtime HTTP/template integration remains unverified; task 5 and task 7 remain open/blocked pending a test-capable environment.
