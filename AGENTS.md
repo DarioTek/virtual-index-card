@@ -9,6 +9,16 @@ Act as a disciplined software development agent. Analyze, plan, implement, test,
 
 Follow the repository's existing conventions and any higher-priority instructions. Preserve user changes and never claim an action or test succeeded unless it actually did.
 
+### Instruction priority
+When instructions conflict, apply them in this order:
+1. Explicit instructions from the user in the current session.
+2. Safety, authorization, and Git rules in this file (Section 11).
+3. `PROJECT_GUIDELINES.md` (if present) for code, testing, and quality standards.
+4. The rest of this file (workflow and documentation process).
+5. Existing repository conventions.
+
+`PROJECT_GUIDELINES.md` governs *how code is written*; this file governs *how work is planned, tracked, and reported*. A project guideline never authorizes skipping planning, approval, or safety steps.
+
 ## 2. Standard Project Structure
 
 Use the following structure as the default for a new project. Adapt it to the project's language, framework, and scale; do not create empty folders or move existing files without a reason.
@@ -17,12 +27,11 @@ Use the following structure as the default for a new project. Adapt it to the pr
 my-project/
 ├── AGENTS.md
 ├── PLAN.md
-├── BACKLOG.md
+├── PROJECT_GUIDELINES.md   (optional, project-specific coding standards)
 ├── README.md
 ├── docs/
 │   ├── architecture.md
-│   ├── technical-decisions.md
-│   └── backlog-archive.md
+│   └── technical-decisions.md
 ├── src/
 ├── tests/
 └── ... (configuration, scripts, deployment, and other project-specific files)
@@ -34,13 +43,13 @@ my-project/
 |---|---|
 | `AGENTS.md` | Persistent operating instructions for AI agents |
 | `PLAN.md` | Current assignment, task sequence, and execution progress |
-| `BACKLOG.md` | Active and future work not currently being executed |
+| `PROJECT_GUIDELINES.md` | Optional project-specific coding, testing, logging, and quality standards |
 | `README.md` | Project overview, setup, usage, and developer instructions |
 | `docs/architecture.md` | Current system architecture and important structural diagrams |
 | `docs/technical-decisions.md` | Architecture and implementation decisions with rationale |
-| `docs/backlog-archive.md` | Completed backlog items retained for historical traceability |
 | `src/` | Application or library source code |
 | `tests/` | Automated tests, organized consistently with the source where practical |
+| GitHub Issues | Backlog: proposed, ready, in-progress, blocked, and deferred work (external to the repository) |
 
 Use `docs/` (plural) as the documentation directory. Do not create a separate `doc/` directory unless an existing project convention or tool requires it.
 
@@ -53,26 +62,28 @@ Maintain these files in the repository root:
 - Treat it as the persistent operating guide.
 - Do not change it unless the user asks or approves a necessary change.
 
+### PROJECT_GUIDELINES.md — Project Coding Standards (optional)
+- If present, read it before planning or writing code, and treat its rules as mandatory for all generated or modified code.
+- Keep project- and language-specific rules (docstring format, logging utilities, folder layout, test frameworks, scheduling conventions) here rather than in this file, so this file stays reusable across projects.
+- Do not change it unless the user asks or approves a necessary change.
+- If a guideline conflicts with this file's safety or authorization rules, follow this file and flag the conflict to the user.
+- If a guideline is ambiguous or impractical for the task, ask rather than silently deviating.
+
 ### PLAN.md — Active Execution Plan
 - Keep it focused on the active assignment.
 - Record the objective, scope, approach, tasks, acceptance criteria, risks, test strategy, decisions, and progress.
+- Reference related GitHub Issues by number (for example, `#42`).
 - Update it throughout execution, not only at the end.
 - Do not mark work complete until its acceptance criteria have been verified.
 
-### BACKLOG.md — Active Project Backlog
-- Maintain the inventory of proposed, ready, in-progress, blocked, and deferred work.
-- Capture future features, bugs, technical debt, performance/security improvements, infrastructure work, documentation, and useful ideas.
-- Give each item a stable unique ID such as `BL-001`.
-- Record description, category, priority, status, acceptance criteria, dependencies, and date added.
-- Check for duplicates before adding an item.
-- Do not implement backlog items merely because they are listed. Implement them when the user selects or authorizes them.
-- Move completed items to `docs/backlog-archive.md` after recording their completion details. Never reuse their IDs.
-
-### docs/backlog-archive.md — Completed Backlog History
-- Store completed backlog items, preserving their original IDs and relevant details.
-- Include completion date and a validation, plan, commit, pull request, or release reference when available.
-- Do not delete or recycle archived IDs.
-- Keep active work in `BACKLOG.md`; the archive is historical and is not an authorization to reopen work.
+### Backlog — GitHub Issues
+- GitHub Issues is the single source of truth for the backlog. Do not create or maintain a `BACKLOG.md` or a backlog archive file in the repository.
+- Capture future features, bugs, technical debt, performance/security improvements, infrastructure work, documentation, and useful ideas as issues.
+- Each issue should include a description, acceptance criteria, and dependencies or context where useful. Use labels for category and priority, and milestones or project boards for status and grouping, following the repository's existing conventions.
+- Search open and closed issues for duplicates before creating one.
+- Do not implement issues merely because they exist. Implement them when the user selects or authorizes them.
+- Closed issues are the historical record; do not reopen them without the user's direction.
+- See Section 8 for backlog workflow.
 
 ### docs/architecture.md
 - Document the actual architecture as it becomes known.
@@ -92,15 +103,16 @@ Maintain these files in the repository root:
 
 For every new assignment:
 
-1. Read `AGENTS.md`, `PLAN.md` (if present), `BACKLOG.md`, and relevant files in `docs/`.
+1. Read `AGENTS.md`, `PROJECT_GUIDELINES.md` (if present), `PLAN.md` (if present), and relevant files in `docs/`.
 2. Inspect the repository structure and relevant documentation.
 3. Inspect Git status, current branch, and existing changes. Do not overwrite or discard user work.
 4. Review relevant source code, tests, configuration, and dependencies.
-5. Restate the objective, expected outcomes, scope, assumptions, and constraints.
-6. Identify affected components, dependencies, risks, and unknowns.
-7. Create or update `PLAN.md` with an actionable, ordered task breakdown.
-8. Define acceptance criteria and a proportionate validation strategy.
-9. Identify relevant backlog items and reference their IDs in the plan.
+5. Identify relevant GitHub Issues (for example, via `gh issue list` / `gh issue view`, if the GitHub CLI is available and authenticated). If issues cannot be accessed, say so and ask the user for the issue details.
+6. Restate the objective, expected outcomes, scope, assumptions, and constraints.
+7. Identify affected components, dependencies, risks, and unknowns.
+8. Create or update `PLAN.md` with an actionable, ordered task breakdown.
+9. Define acceptance criteria and a proportionate validation strategy.
+10. Reference relevant issue numbers in the plan.
 
 For substantial, risky, or architectural changes, present the plan and wait for approval unless the user has already authorized execution. For routine, low-risk work, proceed within the user's request without unnecessary interruptions. Ask a concise clarification when essential information is missing.
 
@@ -112,6 +124,7 @@ A useful plan must:
 - Identify files or components likely to change when known.
 - Define observable acceptance criteria.
 - Include tests and validation.
+- Note which `PROJECT_GUIDELINES.md` requirements apply (for example docstrings, logging, tests, config) and include them in the tasks and acceptance criteria.
 - Identify risks and rollback considerations for risky changes.
 - Distinguish confirmed facts from assumptions.
 
@@ -123,7 +136,7 @@ For each logical task:
 
 1. Mark it `In Progress` in `PLAN.md` before starting.
 2. Inspect the relevant implementation before editing.
-3. Make a focused change consistent with project conventions.
+3. Make a focused change consistent with project conventions and `PROJECT_GUIDELINES.md`.
 4. Add or update tests where appropriate.
 5. Run relevant tests, checks, or validation commands.
 6. Review the diff for unintended changes.
@@ -146,26 +159,28 @@ Update `PLAN.md` after each meaningful milestone and before ending a work sessio
 
 Keep the execution log concise but useful. If interrupted, leave the plan in a state that another session can reliably resume.
 
-## 8. Backlog Management and Archiving
+## 8. Backlog Management (GitHub Issues)
 
-Add an item to `BACKLOG.md` when work is useful but outside the active assignment, including follow-up enhancements, separate defects, technical debt, missing automation, observability, documentation, or test coverage.
+### Proposing new work
+Work that is useful but outside the active assignment (follow-up enhancements, separate defects, technical debt, missing automation, observability, documentation, or test coverage) belongs in GitHub Issues, not in the code or the plan.
 
-Before adding an item:
-1. Search the active backlog and archive for duplicates.
-2. Assign the next available stable ID.
-3. Write an actionable description and observable acceptance criteria.
-4. Set category, priority, status, and date added.
-5. Record dependencies and context where useful.
+Before creating an issue:
+1. Search existing open and closed issues for duplicates.
+2. Write an actionable title and description with observable acceptance criteria.
+3. Apply appropriate labels (category, priority) following the repository's existing label scheme.
+4. Note dependencies and context, linking related issues (`#N`) where useful.
 
-When a backlog item is selected:
-1. Reference its ID in `PLAN.md`.
-2. Change its status in `BACKLOG.md` to `In Progress`.
-3. Implement and validate it through the normal workflow.
-4. On verified completion, move the full item to `docs/backlog-archive.md`.
-5. Record its completion date and validation/delivery reference in the archive.
-6. Remove it from the active section of `BACKLOG.md` and update the summary counts.
+Do not create, edit, close, or comment on issues unless the user requested or authorized it. Otherwise, draft the proposed issue (title, description, acceptance criteria, suggested labels) in your report or in `PLAN.md` under a "Proposed Issues" heading, and let the user decide. When issues cannot be created directly (no CLI access, no authentication), provide the draft for the user to file.
 
-Do not archive an item merely because code was written. Archive only after the acceptance criteria have been verified. If an item is reopened, move it back to `BACKLOG.md` with the same ID and record the reopening context; never create a duplicate ID.
+### Working an issue
+When the user selects an issue:
+1. Reference its number in `PLAN.md`.
+2. Implement and validate it through the normal workflow.
+3. Link the work to the issue in commits and pull requests (for example, `Refs #42`). Use closing keywords such as `Closes #42` only when the user wants the issue closed automatically on merge.
+4. Do not close an issue merely because code was written. Closing requires verified acceptance criteria and, where applicable, user confirmation.
+5. On verified completion, record the outcome in `PLAN.md` and, if authorized, comment on or close the issue with a summary of the validation performed.
+
+If a closed issue needs to be reopened, reopen the same issue with a comment explaining why. Never create a duplicate.
 
 ## 9. Errors, Blockers, and Plan Changes
 
@@ -176,7 +191,7 @@ When something fails:
 4. Re-run relevant validation.
 5. Document the outcome.
 
-If unresolved, mark the task `Blocked`, explain why, and state what is needed to unblock it. Add a backlog item when the issue is separate from the active assignment.
+If unresolved, mark the task `Blocked`, explain why, and state what is needed to unblock it. If the issue is separate from the active assignment, propose a GitHub Issue for it (see Section 8).
 
 If the approach must change, update `PLAN.md` with the reason, impact, revised tasks, and any approval needed. Preserve completed work and meaningful history.
 
@@ -197,6 +212,7 @@ Choose validation appropriate to the change. This may include unit, integration,
 - Preserve pre-existing user changes.
 - Do not reset, clean, force-push, rewrite shared history, or discard user work unless explicitly authorized.
 - Do not commit, push, publish, deploy, or create a pull request unless requested or clearly authorized.
+- Do not create, modify, or close GitHub Issues unless requested or clearly authorized.
 - Never expose, commit, or copy secrets, credentials, tokens, or private environment files.
 - Ask before destructive, externally visible, costly, or security-sensitive actions.
 - Follow least-privilege principles.
@@ -205,12 +221,13 @@ Choose validation appropriate to the change. This may include unit, integration,
 
 At the beginning of every resumed session:
 
-1. Read the three control files and relevant documentation.
+1. Read `AGENTS.md`, `PROJECT_GUIDELINES.md` (if present), `PLAN.md`, and relevant documentation.
 2. Inspect Git status and the actual repository state.
-3. Compare recorded progress with the code and test results.
-4. Re-verify tasks marked `In Progress` or recently `Completed` when appropriate.
-5. Resume from the next valid task; do not repeat verified completed work unnecessarily.
-6. Correct stale or inaccurate documentation before proceeding.
+3. Re-check the state of referenced GitHub Issues, where accessible.
+4. Compare recorded progress with the code and test results.
+5. Re-verify tasks marked `In Progress` or recently `Completed` when appropriate.
+6. Resume from the next valid task; do not repeat verified completed work unnecessarily.
+7. Correct stale or inaccurate documentation before proceeding.
 
 The files are records, not proof. Verify the real project state.
 
@@ -221,11 +238,11 @@ Before reporting an assignment complete:
 - [ ] All in-scope tasks are completed or explicitly identified as blocked/deferred.
 - [ ] Acceptance criteria have been checked.
 - [ ] Relevant tests and validation have been run.
+- [ ] The Definition of Done in `PROJECT_GUIDELINES.md` (if present) is satisfied, or deviations are disclosed.
 - [ ] Failures and unrun checks are disclosed.
 - [ ] The final diff has been reviewed.
 - [ ] `PLAN.md` reflects the verified final state.
-- [ ] `BACKLOG.md` includes relevant new work and updated selected items.
-- [ ] Completed backlog items have been moved to `docs/backlog-archive.md`.
+- [ ] Related GitHub Issues are referenced, and follow-up work is drafted or filed as issues (as authorized).
 - [ ] Remaining limitations and follow-up work are documented.
 
 ## 14. Final Response
@@ -234,7 +251,7 @@ Provide a concise report with:
 - Summary of the change.
 - Files created, modified, or deleted.
 - Tests/checks run and their actual results.
-- Backlog items added, updated, completed, or archived.
+- GitHub Issues referenced, created, updated, or closed, plus any proposed issues awaiting approval.
 - Outstanding issues, assumptions, and limitations.
 - Recommended next step.
 
