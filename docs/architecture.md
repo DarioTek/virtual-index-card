@@ -4,7 +4,7 @@
 
 ## Product shape
 
-A hosted FastAPI web application with one private deck per account. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Notes are plain text; each card has a front and back. The management page lists cards newest-created first for CRUD; Review shows one card at a time in the saved deck order and is the only page offering a shuffle control. Shuffle order is stored in SQLite and survives reloads, independently of the management view's creation order.
+A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on). Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Notes are plain text; each card has a front and back. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
 
 ## Components
 
@@ -13,9 +13,9 @@ flowchart TB
     Browser[Browser]
     subgraph App[FastAPI application]
         UI[Templates + static CSS/JS]
-        Routes[Account pages + admin approval queue + card API]
+        Routes[Account pages + deck selection/creation + admin queue + card API]
         Domain[Card model, validation, Fisher–Yates shuffle]
-        Repo[sqlite3 repository, user-scoped]
+        Repo[sqlite3 repository, account- and deck-scoped]
     end
     DB[(SQLite database)]
     Browser --> UI
@@ -32,23 +32,24 @@ flowchart TB
 | `admin.py` | `ensure_admin()` used by the CLI and the startup bootstrap |
 | `create_admin.py` | `python -m virtual_index_card.create_admin` CLI (create or promote an admin) |
 | `config.py` | `Settings` from `VIC_DATABASE_PATH`, `VIC_SESSION_TTL_SECONDS`, `VIC_COOKIE_SECURE`, `VIC_ADMIN_USERNAME`, `VIC_ADMIN_PASSWORD` |
-| `db.py` | Connection factory, schema creation, `PRAGMA user_version = 2`, in-place v1 → v2 migration |
+| `db.py` | Connection factory, schema creation, `PRAGMA user_version = 3`, v1 → v2 → v3 and v2 → v3 migrations |
 | `domain.py` | `Card`, note validation, Fisher–Yates shuffle with injectable RNG |
-| `repository.py` | All SQL; every card query filters by `user_id` |
+| `repository.py` | All SQL; deck and card queries are scoped to the owning `user_id` and selected `deck_id` |
 | `security.py` | PBKDF2 password hashing, random tokens, constant-time comparison |
 | `templates/` | Base layout, login, account-request form, admin queue + credentials page, deck page |
 | `static/` | CSS flip transform and fetch-based UI interactions |
 
 ## Data model
 
-SQLite schema version 2 contains:
+SQLite schema version 3 contains:
 
 - `users(id, username UNIQUE NOCASE, salt, password_hash, role, created_at)` — `role` is `admin` or `user` (existing v1 accounts become `user`)
+- `decks(id, user_id, name, created_at)` — account-owned decks with case-insensitive per-account name uniqueness; a composite unique key supports card ownership enforcement
 - `sessions(token_hash PRIMARY KEY, user_id, expires_at, created_at)`
-- `cards(id, user_id, front, back, position, created_at, updated_at)`
+- `cards(id, user_id, deck_id, front, back, position, created_at, updated_at)` — composite foreign key `(deck_id, user_id)` prevents associating a card with another account's deck
 - `account_requests(id, username, contact, note, status, created_at, decided_at, decided_by, created_user_id)` — `status` is `pending`, `approved`, or `rejected`
 
-Indexes cover session expiry, `(user_id, position)`, and request status. Foreign keys are enabled. No plaintext password or raw session token is stored. Version 1 databases are migrated in place on startup (additive only: `users.role` plus the new table); a mismatched `PRAGMA user_version` still fails loudly without touching data.
+Indexes cover session expiry, account/deck card position, and request status. Foreign keys are enabled. No plaintext password or raw session token is stored. Existing v1 databases pass through the v1 → v2 → v3 migrations; existing v2 databases migrate in place by creating `My Deck 1` for each account and moving existing card rows into it while preserving card IDs, content, timestamps, and Review positions. A mismatched `PRAGMA user_version` fails loudly.
 
 ## Interfaces
 
@@ -66,24 +67,26 @@ Indexes cover session expiry, `(user_id, position)`, and request status. Foreign
 | `POST` | `/admin/users/{id}/reset-password` | Generate a new temporary password and sign the user out | Admin + CSRF form token |
 | `GET`/`POST` | `/login` | Login form / start session | None |
 | `POST` | `/logout` | End session | Session + CSRF form token |
-| `GET` | `/` | Newest-created-first card management page | Session |
-| `GET` | `/review?index=N` | Single-card Review in saved order; shuffle control | Session |
-| `POST` | `/api/cards` | Create card | Session + `X-CSRF-Token` |
-| `PATCH` | `/api/cards/{id}` | Edit card | Session + CSRF |
-| `DELETE` | `/api/cards/{id}` | Delete card | Session + CSRF |
-| `POST` | `/api/deck/shuffle` | Persist new Review order (called from Review UI) | Session + CSRF |
+| `GET` | `/?deck_id=N` | Newest-created-first management page for selected deck; missing ID selects first deck | Session |
+| `POST` | `/decks` | Create the next sequentially named deck | Session + CSRF form token |
+| `GET` | `/review?deck_id=N&index=M` | Single-card Review in selected deck's saved order; shuffle control | Session |
+| `POST` | `/api/cards?deck_id=N` | Create card in selected deck; missing ID selects first deck | Session + `X-CSRF-Token` |
+| `PATCH` | `/api/cards/{id}?deck_id=N` | Edit a selected-deck card | Session + CSRF |
+| `DELETE` | `/api/cards/{id}?deck_id=N` | Delete a selected-deck card | Session + CSRF |
+| `POST` | `/api/deck/shuffle?deck_id=N` | Persist selected deck's new Review order | Session + CSRF |
 
 ## Key flows
 
 1. **Request/approval/login:** a visitor files an account request (desired account name, optional contact/note). An administrator reviews `/admin/requests`; approving creates the account with the requested or an edited account name and either an admin-chosen or a generated temporary password, shown once on the result page. Approving/rejecting is decided atomically with `UPDATE ... WHERE status = 'pending'` so a decided request cannot be re-decided. Reset issues a new temporary password and deletes the user's sessions. Login hashes with PBKDF2-HMAC-SHA256 and a per-user salt; sessions store only SHA-256 hashes and are conveyed in HttpOnly cookies plus a readable CSRF cookie.
 2. **Flip:** the card's button toggles `aria-pressed` and a CSS class; the 3D transform reveals the back face. No server call.
 3. **CRUD:** JavaScript sends JSON with the CSRF header; the route validates text, writes through the repository, and the management page reloads sorted by `created_at DESC, id DESC`. Edits and Review shuffles do not change this view's order.
-4. **Shuffle:** The control appears only in Review (disabled with one card, absent with none). `shuffled_cards()` reorders with Fisher–Yates, positions are rewritten in one transaction, and the browser navigates to `/review` to start at the first card of the saved new order. Reload uses the same order.
-5. **Review:** `/review` reads the saved `position` order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links wrap around; arrow keys also navigate. No server call is needed to flip.
+4. **Deck creation and selection:** Each account starts with `My Deck 1`. The management and Review pages list only that account's decks; creating a deck adds the next sequential name and opens it. `deck_id` is resolved against the current account on every page and API request; unknown or foreign IDs return 404. Requests without an ID use that account's first deck for backwards compatibility; invalid or foreign IDs return 404.
+5. **Shuffle:** The control appears only in Review (disabled with one card, absent with none). `shuffled_cards()` reorders the selected deck with Fisher–Yates, positions are rewritten in one transaction, and the browser stays on that deck at the first card of its saved new order. Reload uses the same order.
+6. **Review:** `/review` reads the selected deck's saved `position` order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links retain the selected `deck_id` and wrap around; arrow keys also navigate. No server call is needed to flip.
 
 ## Security posture
 
-- Every card query is scoped to the authenticated `user_id`; cross-account IDs return 404.
+- Every card operation is scoped to the authenticated `user_id` and validated `deck_id`; cross-account deck/card IDs return 404. The composite database foreign key also prevents mismatched card/deck ownership.
 - Admin-only routes require role `admin` (403 otherwise); the queue decisions are atomic and audited via `decided_by`/`decided_at`.
 - Generated temporary passwords use an unambiguous alphabet and are shown once, never stored; resets sign the user out everywhere.
 - User notes are escaped by Jinja and inserted as text, never `innerHTML`.
@@ -99,11 +102,11 @@ HTTPS/reverse proxy, production secrets management, and scheduled backups are **
 
 ## Testing
 
-`uv run pytest -q` runs 65 tests: domain/shuffle and username/password invariants, password/token helpers, repository isolation, migration of a synthetic v1 database to v2, and FastAPI integration coverage for the request → approval → login flow, role gating, CSRF, rejection, one-time credential display, password reset semantics, CRUD, newest-first management, persisted Review shuffle, and account separation. A live `uvicorn` smoke test with `curl` verified the same end-to-end flow.
+The pytest suite covers domain/shuffle and username/password invariants, password/token helpers, repository isolation, schema migrations, account approval and login, role gating, CSRF, CRUD, newest-first management, persisted Review shuffle, and account separation. Multi-deck coverage verifies sequential names, schema-v2 data migration, selected-deck card/Review isolation, and rejection of foreign deck IDs. Run `uv run pytest -q` to execute the suite.
 
 ## Known limitations
 
-- One deck per account; multiple decks are `BL-001`.
+- Decks can be created and selected; rename/delete, sharing, and import/export are not implemented.
 - Plain text only; Markdown is `BL-004`.
 - No automatic delivery of credentials — the administrator relays them out of band; mail-based recovery remains `BL-024`.
 - No password reset when the administrator is unreachable; administrators reset passwords from the request queue or with `create_admin`.

@@ -101,6 +101,15 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Separate username/password forms; signing out all sessions including the current one (rejected: forces re-login for a routine change); making the profile page available to all users now (deferred — the ask was the admin role; regular accounts keep the admin-reset path).
 - **Consequences:** Administrators can rotate credentials without shell access. An attacker with the admin's session still cannot change the password without the current password. `VIC_ADMIN_PASSWORD` re-pinning remains a possible surprise, mitigated by the in-page warning.
 
+## TD-012: Multiple account-owned decks with sequential default names
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Issue #1 requested multiple decks for different topics. The user specified generated names `My Deck 1`, `My Deck 2`, and so on.
+- **Decision:** Each account owns independent decks. New accounts and upgraded accounts receive an initial `My Deck 1`; additional decks receive the next sequential account-local name. The existing management and Review pages select a deck through `deck_id`; omitted IDs resolve to the account's first deck for compatibility. Deck rename, delete, sharing, and import/export are not part of this change.
+- **Alternatives considered:** Keep one deck; prompt for a custom name at creation; migrate existing data to a differently named default; use a separate deck-specific page hierarchy.
+- **Consequences:** Schema v3 associates cards with both their owner and deck. The v2 → v3 migration preserves existing card records and saved ordering. Deck-specific queries and API paths must validate ownership on every request.
+
 ## Superseded decisions
 
 - Browser-only static app with `localStorage`.

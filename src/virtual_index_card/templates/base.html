@@ -13,8 +13,13 @@
     {% if user %}
     <div class="header-right">
       <nav class="main-nav" aria-label="Main navigation">
+        {% if deck is defined and deck %}
+        <a href="/?deck_id={{ deck['id'] }}">Deck</a>
+        <a href="/review?deck_id={{ deck['id'] }}">Review</a>
+        {% else %}
         <a href="/">Deck</a>
         <a href="/review">Review</a>
+        {% endif %}
         {% if user['role'] == 'admin' %}<a href="/admin/requests">Requests</a><a href="/admin/users">Users</a><a href="/admin/profile">Profile</a>{% endif %}
       </nav>
       <div class="account">

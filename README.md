@@ -1,17 +1,17 @@
 # virtual-index-card
 
-A hosted web application for personal index cards. Each approved account has one private deck: write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the deck, and that review order persists across reloads.
+A hosted web application for personal index cards. Each approved account can create multiple private decks, named sequentially by default (`My Deck 1`, `My Deck 2`, ...). Write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the selected deck, and that review order persists across reloads.
 
 New accounts are **created by an administrator**: visitors submit an account request, an administrator approves it, and the system issues the account name and password to hand to the user.
 
-All durable data — accounts, sessions, cards, and card order — is stored in **SQLite**.
+All durable data — accounts, sessions, decks, cards, and per-deck card order — is stored in **SQLite**.
 
 ## Features
 
 - Administrator-approved accounts: visitors request an account; an administrator approves or rejects the request and receives the new account's credentials to deliver out of band.
 - Individual accounts with login and logout.
 - Administrator role with an account-request queue, one-time credential display, password reset (which signs the user out everywhere), a **Users page listing every account** with delete (permanent) and reset actions, an **Admin profile page** to update the administrator's username and password (current password required; other sessions are signed out), and a first-admin bootstrap command/env vars.
-- Per-account decks: one user cannot see or modify another user's cards.
+- Multiple private decks per account, created with sequential default names; users cannot see or modify another account's decks or cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
 - Plain-text notes with safe HTML escaping.
@@ -61,7 +61,7 @@ Configuration (all optional):
 uv run pytest -q
 ```
 
-Verified on 2026-11-27 with `uv`: **65 passed**, 1 Starlette/httpx deprecation warning.
+Baseline before multi-deck changes (2026-11-27): **65 passed**, 1 Starlette/httpx deprecation warning. Re-run the suite after this change.
 
 ## Project layout
 
@@ -71,7 +71,7 @@ src/virtual_index_card/
   admin.py        ensure_admin() shared by the CLI and env bootstrap
   create_admin.py `python -m virtual_index_card.create_admin` CLI
   config.py       Environment-based settings
-  db.py           SQLite connection, schema version 2, v1 → v2 migration
+  db.py           SQLite connection, schema version 3, v1 → v2 → v3 and v2 → v3 migrations
   domain.py       Card model, validation, username/password rules, Fisher–Yates shuffle
   repository.py   User-scoped SQLite queries and account-request persistence
   security.py     Password hashing, temporary-password generation, token helpers
@@ -88,7 +88,7 @@ See the [Raspberry Pi deployment runbook](docs/raspberry-pi-deployment.md) for c
 ## Documentation
 
 - [`PLAN.md`](PLAN.md) — implementation record and remaining roadmap.
-- [`BACKLOG.md`](BACKLOG.md) — active future work.
+- Open and proposed follow-up work is tracked through GitHub Issues; see [`PLAN.md`](PLAN.md) for this assignment's status.
 - [`docs/backlog-archive.md`](docs/backlog-archive.md) — completed work history.
 - [`docs/architecture.md`](docs/architecture.md) — as-built architecture.
 - [`docs/raspberry-pi-deployment.md`](docs/raspberry-pi-deployment.md) — Raspberry Pi operator runbook (not yet tested on a Pi).

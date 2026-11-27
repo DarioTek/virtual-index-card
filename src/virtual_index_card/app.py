@@ -567,19 +567,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         return RedirectResponse("/admin/profile?saved=updated", status_code=303)
 
-    # --- Deck page ----------------------------------------------------------
+    # --- Deck pages and creation -------------------------------------------
+
+    def require_selected_deck(
+        connection: Connection, user_id: int, deck_id: int | None
+    ) -> object:
+        deck = repo.get_deck(connection, user_id, deck_id)
+        if deck is None:
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        return deck
+
+    @app.post("/decks", tags=["decks"])
+    def create_deck_page(
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        with connection:
+            deck = repo.create_deck(connection, int(user["id"]), utc_now())
+        return RedirectResponse(f"/?deck_id={deck['id']}", status_code=303)
 
     @app.get("/", response_class=HTMLResponse, tags=["ui"])
-    def deck_page(request: Request, connection: Annotated[Connection, Depends(get_connection)]) -> Response:
+    def deck_page(
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+        deck_id: int | None = None,
+    ) -> Response:
         user = current_user(request, connection)
         if user is None:
             return RedirectResponse("/login", status_code=303)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        decks = repo.list_decks(connection, int(user["id"]))
         return templates.TemplateResponse(
             request,
             "deck.html",
             {
                 "user": user,
-                "cards": repo.list_cards_newest_first(connection, int(user["id"])),
+                "deck": deck,
+                "decks": decks,
+                "cards": repo.list_cards_newest_first(
+                    connection, int(user["id"]), int(deck["id"])
+                ),
                 "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
             },
         )
@@ -589,11 +619,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         connection: Annotated[Connection, Depends(get_connection)],
         index: int = 0,
+        deck_id: int | None = None,
     ) -> Response:
         user = current_user(request, connection)
         if user is None:
             return RedirectResponse("/login", status_code=303)
-        cards = repo.list_cards(connection, int(user["id"]))
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        decks = repo.list_decks(connection, int(user["id"]))
+        cards = repo.list_cards(connection, int(user["id"]), int(deck["id"]))
         total = len(cards)
         position = index % total if total else 0
         return templates.TemplateResponse(
@@ -601,6 +634,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "review.html",
             {
                 "user": user,
+                "deck": deck,
+                "decks": decks,
                 "card": cards[position] if cards else None,
                 "position": position,
                 "total": total,
@@ -618,11 +653,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: CardInput,
         user: Annotated[object, Depends(require_user)],
         connection: Annotated[Connection, Depends(get_connection)],
+        deck_id: int | None = None,
     ) -> dict:
         require_csrf(request)
         front, back = validated_note_pair(payload)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
-            card = repo.create_card(connection, int(user["id"]), front, back, utc_now())
+            card = repo.create_card(
+                connection, int(user["id"]), front, back, utc_now(), int(deck["id"])
+            )
         return {"card": asdict(card)}
 
     @app.patch("/api/cards/{card_id}", tags=["cards"])
@@ -632,12 +671,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: CardInput,
         user: Annotated[object, Depends(require_user)],
         connection: Annotated[Connection, Depends(get_connection)],
+        deck_id: int | None = None,
     ) -> dict:
         require_csrf(request)
         front, back = validated_note_pair(payload)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
             card = repo.update_card(
-                connection, int(user["id"]), card_id, front, back, utc_now()
+                connection, int(user["id"]), card_id, front, back, utc_now(), int(deck["id"])
             )
         if card is None:
             raise HTTPException(status_code=404, detail="Card not found.")
@@ -649,10 +690,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         user: Annotated[object, Depends(require_user)],
         connection: Annotated[Connection, Depends(get_connection)],
+        deck_id: int | None = None,
     ) -> Response:
         require_csrf(request)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
-            removed = repo.delete_card(connection, int(user["id"]), card_id)
+            removed = repo.delete_card(
+                connection, int(user["id"]), card_id, int(deck["id"])
+            )
         if not removed:
             raise HTTPException(status_code=404, detail="Card not found.")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -662,12 +707,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         user: Annotated[object, Depends(require_user)],
         connection: Annotated[Connection, Depends(get_connection)],
+        deck_id: int | None = None,
     ) -> dict:
         require_csrf(request)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
-            cards = repo.list_cards(connection, int(user["id"]))
+            cards = repo.list_cards(connection, int(user["id"]), int(deck["id"]))
             shuffled = shuffled_cards(cards)
-            repo.replace_positions(connection, int(user["id"]), shuffled)
+            repo.replace_positions(
+                connection, int(user["id"]), shuffled, int(deck["id"])
+            )
         return {"cards": [asdict(card) for card in shuffled]}
 
     return app

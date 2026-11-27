@@ -47,6 +47,21 @@ h1 { margin-top: 0; }
 
 .card-count { color: var(--muted); margin-bottom: 0; }
 
+.deck-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; }
+.deck-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 0.45rem; }
+.deck-picker label { font-size: 0.85rem; font-weight: 600; }
+.deck-picker select {
+  min-width: 9rem;
+  font: inherit;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: white;
+  color: inherit;
+}
+.new-deck-form { margin: 0; }
+.deck-controls select:focus-visible { outline: 3px solid #f0a32b; outline-offset: 2px; }
+
 button {
   font: inherit;
   padding: 0.6rem 1rem;

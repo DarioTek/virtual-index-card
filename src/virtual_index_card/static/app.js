@@ -1,4 +1,6 @@
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const selectedDeckId = document.querySelector('[data-deck-id]')?.dataset.deckId;
+const deckQuery = selectedDeckId ? `?deck_id=${encodeURIComponent(selectedDeckId)}` : '';
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
@@ -39,15 +41,15 @@ document.getElementById('create-form')?.addEventListener('submit', (event) => {
     front: form.elements.front.value,
     back: form.elements.back.value,
   };
-  reloadAfter(apiRequest('/api/cards', { method: 'POST', body: JSON.stringify(payload) }));
+  reloadAfter(apiRequest(`/api/cards${deckQuery}`, { method: 'POST', body: JSON.stringify(payload) }));
 });
 
 document.getElementById('shuffle-btn')?.addEventListener('click', async (event) => {
   const button = event.currentTarget;
   button.disabled = true;
   try {
-    await apiRequest('/api/deck/shuffle', { method: 'POST' });
-    window.location.assign('/review');
+    await apiRequest(`/api/deck/shuffle${deckQuery}`, { method: 'POST' });
+    window.location.assign(`/review${deckQuery}`);
   } catch (error) {
     button.disabled = false;
     window.alert(error.message);
@@ -63,7 +65,7 @@ document.querySelectorAll('.edit-form').forEach((form) => {
       back: form.elements.back.value,
     };
     reloadAfter(
-      apiRequest(`/api/cards/${card.dataset.cardId}`, {
+      apiRequest(`/api/cards/${card.dataset.cardId}${deckQuery}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       })
@@ -99,7 +101,7 @@ document.addEventListener('click', (event) => {
   const remove = event.target.closest('.delete-btn');
   if (remove && window.confirm('Delete this card?')) {
     const card = remove.closest('.card');
-    reloadAfter(apiRequest(`/api/cards/${card.dataset.cardId}`, { method: 'DELETE' }));
+    reloadAfter(apiRequest(`/api/cards/${card.dataset.cardId}${deckQuery}`, { method: 'DELETE' }));
   }
 });
 

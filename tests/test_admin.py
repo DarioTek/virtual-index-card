@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from virtual_index_card import repository as repo
 from virtual_index_card.app import create_app
 from virtual_index_card.config import Settings
-from virtual_index_card.db import connect
+from virtual_index_card.db import connect, initialize
 from virtual_index_card.domain import utc_now
 from virtual_index_card.security import hash_password
 from tests.conftest import admin_client, csrf_headers, pending_request_id, register
@@ -38,6 +38,22 @@ CREATE TABLE cards (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX idx_cards_user_position ON cards(user_id, position);
+"""
+
+V2_SCHEMA = V1_SCHEMA + """
+ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user'));
+CREATE TABLE account_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    contact TEXT,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_account_requests_status ON account_requests(status, id);
 """
 
 
@@ -477,14 +493,61 @@ def test_migration_from_schema_v1(tmp_path) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
+        migrated_deck = migrated.execute(
+            "SELECT name FROM decks WHERE user_id = (SELECT id FROM users WHERE username = 'legacy')"
+        ).fetchone()[0]
     finally:
         migrated.close()
-    assert version == 2
+    assert version == 3
     assert role == "user"
     assert "account_requests" in tables
+    assert migrated_deck == "My Deck 1"
 
 
-def test_fresh_databases_use_schema_v2(tmp_path) -> None:
+def test_migration_from_schema_v2_preserves_cards_and_order(tmp_path) -> None:
+    database = tmp_path / "v2.sqlite3"
+    connection = sqlite3.connect(database)
+    try:
+        connection.executescript(V2_SCHEMA)
+        connection.execute(
+            "INSERT INTO users (username, salt, password_hash, role, created_at) "
+            "VALUES ('legacy', 'salt', 'digest', 'user', '2026-11-24T00:00:00+00:00')"
+        )
+        connection.executemany(
+            "INSERT INTO cards (id, user_id, front, back, position, created_at, updated_at) "
+            "VALUES (?, 1, ?, ?, ?, ?, ?)",
+            [
+                (41, "front A", "back A", 1, "created A", "updated A"),
+                (77, "front B", "back B", 0, "created B", "updated B"),
+            ],
+        )
+        connection.execute("PRAGMA user_version = 2")
+        connection.commit()
+    finally:
+        connection.close()
+
+    initialize(database)
+    migrated = sqlite3.connect(database)
+    try:
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 3
+        deck_id, name = migrated.execute(
+            "SELECT id, name FROM decks WHERE user_id = 1"
+        ).fetchone()
+        assert name == "My Deck 1"
+        cards = migrated.execute(
+            "SELECT id, deck_id, front, back, position, created_at, updated_at "
+            "FROM cards ORDER BY id"
+        ).fetchall()
+        assert cards == [
+            (41, deck_id, "front A", "back A", 1, "created A", "updated A"),
+            (77, deck_id, "front B", "back B", 0, "created B", "updated B"),
+        ]
+        assert migrated.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        migrated.close()
+
+
+def test_fresh_databases_use_schema_v3(tmp_path) -> None:
     database = tmp_path / "fresh.sqlite3"
     settings = Settings(database_path=database)
     create_app(settings)
@@ -493,7 +556,7 @@ def test_fresh_databases_use_schema_v2(tmp_path) -> None:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
     finally:
         connection.close()
-    assert version == 2
+    assert version == 3
 
 
 def test_unsupported_schema_version_is_rejected(tmp_path) -> None:

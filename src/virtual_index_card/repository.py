@@ -52,7 +52,9 @@ def create_user(
         )
     except sqlite3.IntegrityError as exc:
         raise UsernameTaken(f"Username {username!r} is already registered.") from exc
-    return int(cursor.lastrowid)
+    user_id = int(cursor.lastrowid)
+    create_deck(connection, user_id, created_at)
+    return user_id
 
 
 def set_user_role(connection: sqlite3.Connection, user_id: int, role: str) -> bool:
@@ -240,30 +242,86 @@ def delete_expired_sessions(connection: sqlite3.Connection, now: int) -> None:
     connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
 
 
-# --- Cards -----------------------------------------------------------------
+# --- Decks -----------------------------------------------------------------
+def list_decks(connection: sqlite3.Connection, user_id: int) -> list[sqlite3.Row]:
+    """Return an account's decks in creation order."""
+    return connection.execute(
+        "SELECT * FROM decks WHERE user_id = ? ORDER BY id", (user_id,)
+    ).fetchall()
 
-def list_cards(connection: sqlite3.Connection, user_id: int) -> list[Card]:
-    """Return the persisted order used during Review."""
+
+def get_deck(
+    connection: sqlite3.Connection, user_id: int, deck_id: int | None = None
+) -> sqlite3.Row | None:
+    """Return a requested account-owned deck, or its first deck by default."""
+    if deck_id is None:
+        return connection.execute(
+            "SELECT * FROM decks WHERE user_id = ? ORDER BY id LIMIT 1", (user_id,)
+        ).fetchone()
+    return connection.execute(
+        "SELECT * FROM decks WHERE user_id = ? AND id = ?", (user_id, deck_id)
+    ).fetchone()
+
+
+def create_deck(
+    connection: sqlite3.Connection, user_id: int, created_at: str
+) -> sqlite3.Row:
+    """Create the next sequentially named deck for an account."""
+    cursor = connection.execute(
+        """
+        INSERT INTO decks (user_id, name, created_at)
+        SELECT ?, 'My Deck ' || (COUNT(*) + 1), ?
+        FROM decks WHERE user_id = ?
+        """,
+        (user_id, created_at, user_id),
+    )
+    deck = get_deck(connection, user_id, int(cursor.lastrowid))
+    assert deck is not None
+    return deck
+
+
+# --- Cards -----------------------------------------------------------------
+def list_cards(
+    connection: sqlite3.Connection, user_id: int, deck_id: int | None = None
+) -> list[Card]:
+    """Return the selected deck's persisted order used during Review."""
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return []
     rows = connection.execute(
-        "SELECT * FROM cards WHERE user_id = ? ORDER BY position, id", (user_id,)
+        "SELECT * FROM cards WHERE user_id = ? AND deck_id = ? ORDER BY position, id",
+        (user_id, deck["id"]),
     ).fetchall()
     return [_to_card(row) for row in rows]
 
 
-def list_cards_newest_first(connection: sqlite3.Connection, user_id: int) -> list[Card]:
-    """Return creation order for managing cards, independent of Review order."""
+def list_cards_newest_first(
+    connection: sqlite3.Connection, user_id: int, deck_id: int | None = None
+) -> list[Card]:
+    """Return selected-deck creation order, independent of Review order."""
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return []
     rows = connection.execute(
-        "SELECT * FROM cards WHERE user_id = ? ORDER BY created_at DESC, id DESC",
-        (user_id,),
+        "SELECT * FROM cards WHERE user_id = ? AND deck_id = ? "
+        "ORDER BY created_at DESC, id DESC",
+        (user_id, deck["id"]),
     ).fetchall()
     return [_to_card(row) for row in rows]
 
 
 def get_card(
-    connection: sqlite3.Connection, user_id: int, card_id: int
+    connection: sqlite3.Connection,
+    user_id: int,
+    card_id: int,
+    deck_id: int | None = None,
 ) -> Card | None:
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return None
     row = connection.execute(
-        "SELECT * FROM cards WHERE user_id = ? AND id = ?", (user_id, card_id)
+        "SELECT * FROM cards WHERE user_id = ? AND deck_id = ? AND id = ?",
+        (user_id, deck["id"], card_id),
     ).fetchone()
     return _to_card(row) if row else None
 
@@ -274,19 +332,23 @@ def create_card(
     front: str,
     back: str,
     created_at: str,
+    deck_id: int | None = None,
 ) -> Card:
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        raise ValueError("Deck not found for account.")
     cursor = connection.execute(
         "SELECT COALESCE(MAX(position), -1) + 1 AS next_position FROM cards "
-        "WHERE user_id = ?",
-        (user_id,),
+        "WHERE user_id = ? AND deck_id = ?",
+        (user_id, deck["id"]),
     )
     position = int(cursor.fetchone()["next_position"])
     insert = connection.execute(
-        "INSERT INTO cards (user_id, front, back, position, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (user_id, front, back, position, created_at, created_at),
+        "INSERT INTO cards (user_id, deck_id, front, back, position, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, deck["id"], front, back, position, created_at, created_at),
     )
-    card = get_card(connection, user_id, int(insert.lastrowid))
+    card = get_card(connection, user_id, int(insert.lastrowid), int(deck["id"]))
     assert card is not None
     return card
 
@@ -298,28 +360,47 @@ def update_card(
     front: str,
     back: str,
     updated_at: str,
+    deck_id: int | None = None,
 ) -> Card | None:
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return None
     cursor = connection.execute(
         "UPDATE cards SET front = ?, back = ?, updated_at = ? "
-        "WHERE user_id = ? AND id = ?",
-        (front, back, updated_at, user_id, card_id),
+        "WHERE user_id = ? AND deck_id = ? AND id = ?",
+        (front, back, updated_at, user_id, deck["id"], card_id),
     )
     if cursor.rowcount == 0:
         return None
-    return get_card(connection, user_id, card_id)
+    return get_card(connection, user_id, card_id, int(deck["id"]))
 
 
-def delete_card(connection: sqlite3.Connection, user_id: int, card_id: int) -> bool:
+def delete_card(
+    connection: sqlite3.Connection,
+    user_id: int,
+    card_id: int,
+    deck_id: int | None = None,
+) -> bool:
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return False
     cursor = connection.execute(
-        "DELETE FROM cards WHERE user_id = ? AND id = ?", (user_id, card_id)
+        "DELETE FROM cards WHERE user_id = ? AND deck_id = ? AND id = ?",
+        (user_id, deck["id"], card_id),
     )
     return cursor.rowcount > 0
 
 
 def replace_positions(
-    connection: sqlite3.Connection, user_id: int, cards: Sequence[Card]
+    connection: sqlite3.Connection,
+    user_id: int,
+    cards: Sequence[Card],
+    deck_id: int | None = None,
 ) -> None:
+    deck = get_deck(connection, user_id, deck_id)
+    if deck is None:
+        return
     connection.executemany(
-        "UPDATE cards SET position = ? WHERE user_id = ? AND id = ?",
-        [(card.position, user_id, card.id) for card in cards],
+        "UPDATE cards SET position = ? WHERE user_id = ? AND deck_id = ? AND id = ?",
+        [(card.position, user_id, deck["id"], card.id) for card in cards],
     )

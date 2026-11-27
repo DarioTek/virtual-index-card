@@ -18,6 +18,37 @@ def test_username_is_unique_case_insensitively(connection: sqlite3.Connection) -
         add_user(connection, "alice")
 
 
+def test_decks_are_account_scoped_and_cards_are_independent(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    alice_decks = repo.list_decks(connection, alice)
+    bob_decks = repo.list_decks(connection, bob)
+    assert [deck["name"] for deck in alice_decks] == ["My Deck 1"]
+    assert [deck["name"] for deck in bob_decks] == ["My Deck 1"]
+
+    second = repo.create_deck(connection, alice, utc_now())
+    third = repo.create_deck(connection, alice, utc_now())
+    assert [deck["name"] for deck in repo.list_decks(connection, alice)] == [
+        "My Deck 1", "My Deck 2", "My Deck 3"
+    ]
+    assert repo.get_deck(connection, bob, int(second["id"])) is None
+
+    first_card = repo.create_card(connection, alice, "first", "one", utc_now())
+    second_card = repo.create_card(
+        connection, alice, "second", "two", utc_now(), int(second["id"])
+    )
+    assert [card.front for card in repo.list_cards(connection, alice)] == ["first"]
+    assert [card.front for card in repo.list_cards(connection, alice, int(second["id"]))] == ["second"]
+    assert repo.get_card(connection, alice, first_card.id, int(second["id"])) is None
+    assert repo.update_card(
+        connection, alice, second_card.id, "wrong deck", "no", utc_now(), int(third["id"])
+    ) is None
+    assert repo.delete_card(connection, alice, second_card.id, int(third["id"])) is False
+    assert repo.list_cards(connection, bob) == []
+
+
 def test_card_crud_is_scoped_to_user(connection: sqlite3.Connection) -> None:
     alice = add_user(connection, "alice")
     bob = add_user(connection, "bob")

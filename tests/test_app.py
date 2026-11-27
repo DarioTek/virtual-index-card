@@ -15,6 +15,7 @@ def test_register_creates_private_deck(client: TestClient, settings: Settings) -
     page = client.get("/")
     assert page.status_code == 200
     assert "alice" in page.text
+    assert "My Deck 1" in page.text
     assert "No cards yet" in page.text
 
 
@@ -113,6 +114,80 @@ def test_crud_and_reload_persistence(client: TestClient) -> None:
     assert client.delete(f"/api/cards/{card_id}", headers=headers).status_code == 204
     reloaded = client.get("/")
     assert "edited" not in reloaded.text
+
+
+def test_users_can_create_and_select_independent_decks(client: TestClient) -> None:
+    register(client, "alice")
+    first_page = client.get("/")
+    assert "My Deck 1" in first_page.text
+    first_card = add_card(client, "first-deck card", "first answer")
+    missing_csrf = client.post("/decks", data={}, follow_redirects=False)
+    assert missing_csrf.status_code == 403
+
+    created = client.post(
+        "/decks",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    assert "deck_id=" in created.headers["location"]
+    second_deck_id = int(created.headers["location"].split("deck_id=")[1])
+    second_page = client.get(created.headers["location"])
+    assert "My Deck 2" in second_page.text
+    assert "first-deck card" not in second_page.text
+    second_card_response = client.post(
+        f"/api/cards?deck_id={second_deck_id}",
+        json={"front": "second-deck card", "back": "second answer"},
+        headers=csrf_headers(client),
+    )
+    assert second_card_response.status_code == 201
+    second_card_id = second_card_response.json()["card"]["id"]
+    third_card_response = client.post(
+        f"/api/cards?deck_id={second_deck_id}",
+        json={"front": "another second-deck card", "back": "another answer"},
+        headers=csrf_headers(client),
+    )
+    assert third_card_response.status_code == 201
+    third_card_id = third_card_response.json()["card"]["id"]
+
+    assert "second-deck card" in client.get(f"/?deck_id={second_deck_id}").text
+    assert "first-deck card" not in client.get(f"/?deck_id={second_deck_id}").text
+    assert "first-deck card" in client.get("/").text
+    assert "second-deck card" not in client.get("/").text
+    assert "second-deck card" in client.get(f"/review?deck_id={second_deck_id}").text
+    assert f"deck_id={second_deck_id}" in client.get(
+        f"/review?deck_id={second_deck_id}"
+    ).text
+    shuffled = client.post(
+        f"/api/deck/shuffle?deck_id={second_deck_id}",
+        headers=csrf_headers(client),
+    )
+    assert shuffled.status_code == 200
+    assert {card["id"] for card in shuffled.json()["cards"]} == {
+        second_card_id, third_card_id
+    }
+    assert [card["position"] for card in shuffled.json()["cards"]] == [0, 1]
+    assert "first-deck card" in client.get("/review").text
+
+    assert client.patch(
+        f"/api/cards/{first_card}?deck_id={second_deck_id}",
+        json={"front": "wrong deck", "back": "wrong deck"},
+        headers=csrf_headers(client),
+    ).status_code == 404
+    assert client.post(
+        f"/api/cards?deck_id=999999",
+        json={"front": "foreign", "back": "foreign"},
+        headers=csrf_headers(client),
+    ).status_code == 404
+
+    other = TestClient(create_app(client.app.state.settings))
+    register(other, "bob")
+    assert other.get(f"/?deck_id={second_deck_id}").status_code == 404
+    assert other.patch(
+        f"/api/cards/{second_card_id}?deck_id={second_deck_id}",
+        json={"front": "stolen", "back": "stolen"},
+        headers=csrf_headers(other),
+    ).status_code == 404
 
 
 def test_shuffle_order_persists_for_the_same_account(

@@ -1,12 +1,27 @@
 {% extends "base.html" %}
-{% block title %}My deck · Virtual Index Cards{% endblock %}
+{% block title %}{{ deck['name'] }} · Virtual Index Cards{% endblock %}
 {% block content %}
 <section class="deck-header">
   <div>
-    <h1>My deck</h1>
+    <h1>{{ deck['name'] }}</h1>
     <p class="card-count">{{ cards|length }} card{% if cards|length != 1 %}s{% endif %}</p>
   </div>
-  <a class="secondary link-button" href="/review">Review mode</a>
+  <div class="deck-controls">
+    <form method="get" action="/" class="deck-picker">
+      <label for="deck-select">Your decks</label>
+      <select id="deck-select" name="deck_id">
+        {% for option in decks %}
+        <option value="{{ option['id'] }}"{% if option['id'] == deck['id'] %} selected{% endif %}>{{ option['name'] }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="secondary">Open deck</button>
+    </form>
+    <form method="post" action="/decks" class="new-deck-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">Create deck</button>
+    </form>
+    <a class="secondary link-button" href="/review?deck_id={{ deck['id'] }}">Review mode</a>
+  </div>
 </section>
 
 <section class="editor" aria-labelledby="new-card-heading">
@@ -23,7 +38,7 @@
   </form>
 </section>
 
-<section class="cards" id="cards" aria-label="Index cards">
+<section class="cards" id="cards" aria-label="Index cards" data-deck-id="{{ deck['id'] }}">
   {% for card in cards %}
   <article class="card" data-card-id="{{ card.id }}">
     <button type="button" class="flip-button" aria-pressed="false"
