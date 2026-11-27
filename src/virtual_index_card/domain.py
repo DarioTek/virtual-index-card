@@ -8,6 +8,26 @@ from datetime import datetime, timezone
 from typing import Sequence
 
 MAX_NOTE_LENGTH = 5000
+USERNAME_MIN = 3
+USERNAME_MAX = 30
+PASSWORD_MIN = 8
+PASSWORD_MAX = 128
+
+
+def validate_username(username: str) -> str | None:
+    if not (USERNAME_MIN <= len(username) <= USERNAME_MAX):
+        return f"Username must be between {USERNAME_MIN} and {USERNAME_MAX} characters."
+    if not username.replace("_", "").replace("-", "").isalnum():
+        return "Use only letters, numbers, underscores, or hyphens in usernames."
+    return None
+
+
+def validate_password(password: str) -> str | None:
+    if len(password) < PASSWORD_MIN:
+        return f"Password must be at least {PASSWORD_MIN} characters."
+    if len(password) > PASSWORD_MAX:
+        return f"Password must be at most {PASSWORD_MAX} characters."
+    return None
 
 
 class ValidationError(ValueError):

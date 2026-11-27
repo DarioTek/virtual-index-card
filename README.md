@@ -1,12 +1,16 @@
 # virtual-index-card
 
-A hosted web application for personal index cards. Each registered account has one private deck: write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the deck, and that review order persists across reloads.
+A hosted web application for personal index cards. Each approved account has one private deck: write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the deck, and that review order persists across reloads.
+
+New accounts are **created by an administrator**: visitors submit an account request, an administrator approves it, and the system issues the account name and password to hand to the user.
 
 All durable data — accounts, sessions, cards, and card order — is stored in **SQLite**.
 
 ## Features
 
-- Individual accounts with registration, login, and logout.
+- Administrator-approved accounts: visitors request an account; an administrator approves or rejects the request and receives the new account's credentials to deliver out of band.
+- Individual accounts with login and logout.
+- Administrator role with an account-request queue, one-time credential display, password reset (which signs the user out everywhere), and a first-admin bootstrap command/env vars.
 - Per-account decks: one user cannot see or modify another user's cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
@@ -32,7 +36,14 @@ VIC_DATABASE_PATH=./data/virtual-index-card.sqlite3 \
   uv run uvicorn virtual_index_card.app:app --reload --host 0.0.0.0 --port 10001
 ```
 
-Open <http://127.0.0.1:10001> and create an account. The SQLite file is created automatically on first start and is ignored by Git.
+Bootstrap the first administrator (the CLI creates the account or promotes an existing one and prints a generated temporary password once):
+
+```bash
+VIC_DATABASE_PATH=./data/virtual-index-card.sqlite3 \
+  uv run python -m virtual_index_card.create_admin admin
+```
+
+Then open <http://127.0.0.1:10001> and log in. Visitors use **Request an account** on the login page; the administrator reviews requests at **Admin → Account requests**, and on approval the page shows the account name and temporary password once. New users can log in with those credentials. The SQLite file is created automatically on first start and is ignored by Git.
 
 Configuration (all optional):
 
@@ -41,6 +52,8 @@ Configuration (all optional):
 | `VIC_DATABASE_PATH` | `data/virtual-index-card.sqlite3` | Location of the SQLite database |
 | `VIC_SESSION_TTL_SECONDS` | `604800` | Session lifetime in seconds |
 | `VIC_COOKIE_SECURE` | `false` | Set to `true` when serving over HTTPS |
+| `VIC_ADMIN_USERNAME` | _(unset)_ | Optional administrator bootstrap on every startup: ensure this account exists with the admin role |
+| `VIC_ADMIN_PASSWORD` | _(unset)_ | Password for the bootstrap account; required to create a missing admin, optional when promoting an existing user. Reapplies on each start — unset it afterwards if you do not want the password re-pinned |
 
 ## Test
 
@@ -48,18 +61,20 @@ Configuration (all optional):
 uv run pytest -q
 ```
 
-Verified on 2026-11-24 with `uv`: **25 passed**, 1 Starlette/httpx deprecation warning.
+Verified on 2026-11-27 with `uv`: **47 passed**, 1 Starlette/httpx deprecation warning.
 
 ## Project layout
 
 ```text
 src/virtual_index_card/
-  app.py          FastAPI routes, auth, API, and templates
+  app.py          FastAPI routes, auth, admin approval queue, API, and templates
+  admin.py        ensure_admin() shared by the CLI and env bootstrap
+  create_admin.py `python -m virtual_index_card.create_admin` CLI
   config.py       Environment-based settings
-  db.py           SQLite connection and schema version 1
-  domain.py       Card model, validation, Fisher–Yates shuffle
-  repository.py   User-scoped SQLite queries
-  security.py     Password hashing and token helpers
+  db.py           SQLite connection, schema version 2, v1 → v2 migration
+  domain.py       Card model, validation, username/password rules, Fisher–Yates shuffle
+  repository.py   User-scoped SQLite queries and account-request persistence
+  security.py     Password hashing, temporary-password generation, token helpers
   templates/      Jinja pages
   static/         CSS flip interaction and JavaScript
 tests/            Unit and integration tests

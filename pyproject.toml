@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "virtual-index-card"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hosted personal index card application with SQLite persistence and individual accounts"
 requires-python = ">=3.11"
 dependencies = [

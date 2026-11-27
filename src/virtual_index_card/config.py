@@ -15,6 +15,10 @@ class Settings:
     database_path: Path
     session_ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS
     cookie_secure: bool = False
+    # Optional administrator bootstrap, applied on every startup:
+    # ensures the account exists with the admin role and the given password.
+    admin_username: str | None = None
+    admin_password: str | None = None
 
 
 def load_settings() -> Settings:
@@ -30,4 +34,6 @@ def load_settings() -> Settings:
         database_path=database_path,
         session_ttl_seconds=int(ttl_raw),
         cookie_secure=cookie_secure,
+        admin_username=os.environ.get("VIC_ADMIN_USERNAME", "").strip() or None,
+        admin_password=os.environ.get("VIC_ADMIN_PASSWORD") or None,
     )

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Account requests · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="admin-header">
+  <div>
+    <h1>Account requests</h1>
+    <p class="card-count">{{ pending|length }} pending · {{ decided|length }} recent decisions</p>
+  </div>
+</section>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="admin-panel" aria-labelledby="pending-heading">
+  <h2 id="pending-heading">Pending approval</h2>
+  {% if pending %}
+  <ul class="request-list">
+    {% for request in pending %}
+    <li class="request-card" data-request-id="{{ request['id'] }}">
+      <div class="request-summary">
+        <p class="request-username">{{ request['username'] }}</p>
+        <p class="request-meta">
+          Requested {{ request['created_at'][:10] }}{% if request['contact'] %} · Contact: {{ request['contact'] }}{% endif %}
+        </p>
+        {% if request['note'] %}<p class="request-note">{{ request['note'] }}</p>{% endif %}
+      </div>
+      <form method="post" action="/admin/requests/{{ request['id'] }}/approve" class="approve-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="approve-fields">
+          <div>
+            <label for="account-username-{{ request['id'] }}">Account name</label>
+            <input id="account-username-{{ request['id'] }}" name="account_username"
+                   value="{{ request['username'] }}" required minlength="3" maxlength="30"
+                   pattern="[A-Za-z0-9_-]+" autocomplete="off">
+          </div>
+          <div>
+            <label for="account-password-{{ request['id'] }}">Temporary password <span class="optional">(blank = generate)</span></label>
+            <input id="account-password-{{ request['id'] }}" name="account_password"
+                   minlength="8" maxlength="128" autocomplete="new-password"
+                   placeholder="Generated if left blank">
+          </div>
+        </div>
+        <div class="approve-actions">
+          <button type="submit">Approve &amp; create account</button>
+        </div>
+      </form>
+      <form method="post" action="/admin/requests/{{ request['id'] }}/reject" class="reject-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="danger">Reject request</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No pending requests.</p>
+  {% endif %}
+</section>
+
+<section class="admin-panel" aria-labelledby="decided-heading">
+  <h2 id="decided-heading">Recent decisions</h2>
+  {% if decided %}
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th scope="col">Requested name</th>
+        <th scope="col">Decision</th>
+        <th scope="col">Account</th>
+        <th scope="col">Decided</th>
+        <th scope="col">By</th>
+        <th scope="col"><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for request in decided %}
+      <tr data-request-id="{{ request['id'] }}">
+        <td>{{ request['username'] }}</td>
+        <td><span class="badge badge-{{ request['status'] }}">{{ request['status'] }}</span></td>
+        <td>{{ request['created_username'] or '—' }}</td>
+        <td>{{ request['decided_at'][:10] if request['decided_at'] else '—' }}</td>
+        <td>{{ request['decided_by_username'] or '—' }}</td>
+        <td>
+          {% if request['status'] == 'approved' and request['created_user_id'] %}
+          <form method="post" action="/admin/users/{{ request['created_user_id'] }}/reset-password" class="reset-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary small">Reset password</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No decisions yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

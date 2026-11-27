@@ -1,18 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Create account · Virtual Index Cards{% endblock %}
+{% block title %}Request an account · Virtual Index Cards{% endblock %}
 {% block content %}
 <section class="auth-panel">
-  <h1>Create an account</h1>
-  <p>Each account has its own private deck.</p>
+  <h1>Request an account</h1>
+  <p>New accounts are created by an administrator. Tell us the account name you would
+     like and how to reach you; once an administrator approves your request you will
+     receive an account name and password to log in.</p>
   {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/register" class="auth-form">
-    <label for="username">Username</label>
+    <label for="username">Desired account name</label>
     <input id="username" name="username" required minlength="3" maxlength="30"
-           pattern="[A-Za-z0-9_-]+" autocomplete="username">
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" required minlength="8"
-           autocomplete="new-password">
-    <button type="submit">Create account</button>
+           pattern="[A-Za-z0-9_-]+" autocomplete="username" value="{{ username|default('', true) }}">
+    <label for="contact">Contact <span class="optional">(optional — e-mail or phone, so the administrator can deliver your password)</span></label>
+    <input id="contact" name="contact" maxlength="200" autocomplete="email" value="{{ contact|default('', true) }}">
+    <label for="note">Note for the administrator <span class="optional">(optional)</span></label>
+    <textarea id="note" name="note" rows="2" maxlength="1000">{{ note|default('', true) }}</textarea>
+    <button type="submit">Request account</button>
   </form>
   <p>Already registered? <a href="/login">Log in</a>.</p>
 </section>

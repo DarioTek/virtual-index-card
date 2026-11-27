@@ -70,10 +70,13 @@ sudo tee /etc/virtual-index-card.env >/dev/null <<'EOF'
 VIC_DATABASE_PATH=/mnt/ssd/git/virtual-index-card/data/virtual-index-card.sqlite3
 VIC_COOKIE_SECURE=true
 VIC_SESSION_TTL_SECONDS=604800
+# Optional one-time bootstrap of the first administrator (see section 5):
+# VIC_ADMIN_USERNAME=admin
+# VIC_ADMIN_PASSWORD=change-me-and-remove-afterwards
 EOF
 ```
 
-`VIC_COOKIE_SECURE=true` means sign-in cookies work only over HTTPS; do not register/login over plain HTTP. Keep the SQLite file and the environment file out of Git.
+`VIC_COOKIE_SECURE=true` means sign-in cookies work only over HTTPS; do not request/approve accounts or log in over plain HTTP. Keep the SQLite file and the environment file out of Git.
 
 ## 4. Run Gunicorn as a systemd service on port 10001
 
@@ -176,7 +179,7 @@ curl -i https://cards.example.com/health   # HTTP 200, {"status":"ok"}
 curl -sS -D - -o /dev/null https://cards.example.com/login  # GET: HTTP 200 and security headers
 ```
 
-Then test registration, login, card CRUD and Review over **HTTPS** in a browser. Registration is currently open to anyone who can reach the app; there is no email verification, invite-only mode or login rate limiting. Assess this exposure and complete the threat/privacy review (`BL-013`) before publishing personal notes. If the proxy gives 502, check `journalctl -u virtual-index-card` and Nginx error logs. If Certbot fails, check public DNS resolution, port forwarding, firewall, IPv6 AAAA (if present), and `sudo nginx -t`.
+Then test the account-request flow, login, card CRUD and Review over **HTTPS** in a browser: visitors can only file an account request — accounts are created when the administrator approves them at **Admin → Account requests**, and the system issues a shown-once account name/temporary password. Bootstrap the first administrator before exposing the service: either set `VIC_ADMIN_USERNAME`/`VIC_ADMIN_PASSWORD` in the environment file for one deploy (then remove them; the password reapplies on every start otherwise), or run `sudo -u vic .venv/bin/python -m virtual_index_card.create_admin admin` on the Pi and note the generated password. There is no email verification or login rate limiting yet; mail-based delivery of credentials remains `BL-024`. Assess this exposure and complete the threat/privacy review (`BL-013`) before publishing personal notes. If the proxy gives 502, check `journalctl -u virtual-index-card` and Nginx error logs. If Certbot fails, check public DNS resolution, port forwarding, firewall, IPv6 AAAA (if present), and `sudo nginx -t`.
 
 ## 6. Backups and restore (required before public exposure)
 

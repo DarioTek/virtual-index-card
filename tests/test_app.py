@@ -18,15 +18,15 @@ def test_register_creates_private_deck(client: TestClient, settings: Settings) -
     assert "No cards yet" in page.text
 
 
-def test_duplicate_registration_is_rejected(client: TestClient) -> None:
+def test_duplicate_request_is_rejected(client: TestClient) -> None:
     register(client, "alice")
     response = client.post(
         "/register",
-        data={"username": "ALICE", "password": "password123"},
+        data={"username": "ALICE"},
         follow_redirects=False,
     )
     assert response.status_code == 400
-    assert "already registered" in response.text
+    assert "already taken" in response.text
 
 
 def test_login_and_logout(client: TestClient) -> None:

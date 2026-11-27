@@ -1,6 +1,8 @@
-"""FastAPI application: accounts, card management, and shuffled Review."""
+"""FastAPI application: accounts, account requests, card management, and shuffled Review."""
 
+import logging
 import time
+from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Iterator
@@ -13,16 +15,32 @@ from pydantic import BaseModel, ConfigDict
 from sqlite3 import Connection
 
 from . import repository as repo
+from .admin import ensure_admin
 from .config import Settings, load_settings
 from .db import connect, initialize
-from .domain import ValidationError, clean_note, shuffled_cards, utc_now
-from .security import hash_password, new_token, tokens_match, verify_password
+from .domain import (
+    ValidationError,
+    clean_note,
+    shuffled_cards,
+    utc_now,
+    validate_password,
+    validate_username,
+)
+from .security import (
+    generate_temporary_password,
+    hash_password,
+    new_token,
+    tokens_match,
+    verify_password,
+)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 SESSION_COOKIE = "vic_session"
 CSRF_COOKIE = "vic_csrf"
-USERNAME_MAX = 30
-PASSWORD_MIN = 8
+CONTACT_MAX = 200
+NOTE_MAX = 1000
+
+logger = logging.getLogger(__name__)
 
 
 class CardInput(BaseModel):
@@ -35,8 +53,20 @@ class CardInput(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     initialize(settings.database_path)
+    if settings.admin_username:
+        try:
+            with closing(connect(settings.database_path)) as connection:
+                with connection:
+                    action = ensure_admin(
+                        connection, settings.admin_username, settings.admin_password
+                    )
+        except (ValueError, repo.UsernameTaken) as exc:
+            raise RuntimeError(
+                f"Administrator bootstrap (VIC_ADMIN_USERNAME) failed: {exc}"
+            ) from exc
+        logger.info("Administrator bootstrap for %r: %s", settings.admin_username, action)
 
-    app = FastAPI(title="Virtual Index Cards", version="0.1.0")
+    app = FastAPI(title="Virtual Index Cards", version="0.2.0")
     app.state.settings = settings
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
@@ -60,10 +90,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Authentication required.")
         return user
 
+    def require_admin(request: Request, connection: Annotated[Connection, Depends(get_connection)]) -> object:
+        user = require_user(request, connection)
+        if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required.")
+        return user
+
     def require_csrf(request: Request) -> None:
         if not tokens_match(
             request.cookies.get(CSRF_COOKIE), request.headers.get("X-CSRF-Token")
         ):
+            raise HTTPException(status_code=403, detail="Invalid CSRF token.")
+
+    def require_form_csrf(request: Request, csrf_token: str | None) -> None:
+        if not tokens_match(request.cookies.get(CSRF_COOKIE), csrf_token):
             raise HTTPException(status_code=403, detail="Invalid CSRF token.")
 
     def set_auth_cookies(
@@ -97,56 +137,108 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         set_auth_cookies(response, session_token, csrf_token)
 
-    def validate_credentials(username: str, password: str) -> str | None:
-        username = username.strip()
-        if not (3 <= len(username) <= USERNAME_MAX):
-            return f"Username must be between 3 and {USERNAME_MAX} characters."
-        if not username.replace("_", "").replace("-", "").isalnum():
-            return "Use only letters, numbers, underscores, or hyphens in usernames."
-        if len(password) < PASSWORD_MIN:
-            return f"Password must be at least {PASSWORD_MIN} characters."
-        return None
-
     def validated_note_pair(payload: CardInput) -> tuple[str, str]:
         try:
             return clean_note(payload.front, "Front"), clean_note(payload.back, "Back")
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    def render_admin_requests(
+        request: Request,
+        user: object,
+        connection: Connection,
+        error: str | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        all_requests = repo.list_account_requests(connection, decided_limit=20)
+        pending = [row for row in all_requests if row["status"] == "pending"]
+        decided = [row for row in all_requests if row["status"] != "pending"]
+        return templates.TemplateResponse(
+            request,
+            "admin_requests.html",
+            {
+                "user": user,
+                "pending": pending,
+                "decided": decided,
+                "error": error,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+            status_code=status_code,
+        )
+
+    def render_credentials(
+        request: Request,
+        user: object,
+        username: str,
+        password: str,
+        heading: str,
+        detail: str,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "admin_credentials.html",
+            {
+                "user": user,
+                "account_username": username,
+                "password": password,
+                "heading": heading,
+                "detail": detail,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+        )
+
     @app.get("/health", tags=["ops"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    # --- Account pages ------------------------------------------------------
+    # --- Account request pages ---------------------------------------------
 
     @app.get("/register", response_class=HTMLResponse, tags=["accounts"])
     def register_form(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "register.html", {"error": None})
+        return templates.TemplateResponse(
+            request,
+            "register.html",
+            {"error": None, "username": "", "contact": "", "note": ""},
+        )
 
     @app.post("/register", tags=["accounts"])
     def register(
         request: Request,
         username: Annotated[str, Form()],
-        password: Annotated[str, Form()],
         connection: Annotated[Connection, Depends(get_connection)],
+        contact: Annotated[str, Form()] = "",
+        note: Annotated[str, Form()] = "",
     ) -> Response:
         username = username.strip()
-        error = validate_credentials(username, password)
-        session_response: Response | None = None
+        contact = contact.strip()
+        note = note.strip()
+        error = validate_username(username)
+        if error is None and len(contact) > CONTACT_MAX:
+            error = f"Contact must be at most {CONTACT_MAX} characters."
+        if error is None and len(note) > NOTE_MAX:
+            error = f"Note must be at most {NOTE_MAX} characters."
         if error is None:
-            salt, digest = hash_password(password)
-            try:
-                with connection:
-                    user_id = repo.create_user(connection, username, salt, digest, utc_now())
-                    session_response = RedirectResponse("/", status_code=303)
-                    start_session(connection, user_id, session_response)
-            except repo.UsernameTaken:
-                error = "That username is already registered."
-        if error is not None or session_response is None:
+            with connection:
+                if repo.get_user_by_username(connection, username) is not None:
+                    error = "That username is already taken. Please choose another."
+                elif repo.find_pending_request(connection, username) is not None:
+                    error = "That username already has a request awaiting review."
+                else:
+                    repo.create_account_request(
+                        connection, username, contact or None, note or None, utc_now()
+                    )
+        if error is not None:
             return templates.TemplateResponse(
-                request, "register.html", {"error": error}, status_code=400
+                request,
+                "register.html",
+                {"error": error, "username": username, "contact": contact, "note": note},
+                status_code=400,
             )
-        return session_response
+        return RedirectResponse("/register/received", status_code=303)
+
+    @app.get("/register/received", response_class=HTMLResponse, tags=["accounts"])
+    def register_received(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request, "register_done.html", {})
 
     @app.get("/login", response_class=HTMLResponse, tags=["accounts"])
     def login_form(request: Request) -> HTMLResponse:
@@ -180,8 +272,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         csrf_token: Annotated[str, Form()],
         connection: Annotated[Connection, Depends(get_connection)],
     ) -> Response:
-        if not tokens_match(request.cookies.get(CSRF_COOKIE), csrf_token):
-            raise HTTPException(status_code=403, detail="Invalid CSRF token.")
+        require_form_csrf(request, csrf_token)
         token = request.cookies.get(SESSION_COOKIE)
         if token:
             with connection:
@@ -189,6 +280,141 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = RedirectResponse("/login", status_code=303)
         clear_auth_cookies(response)
         return response
+
+    # --- Administrator: account request queue -------------------------------
+
+    @app.get("/admin/requests", response_class=HTMLResponse, tags=["admin"])
+    def admin_requests_page(
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+    ) -> Response:
+        user = current_user(request, connection)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required.")
+        return render_admin_requests(request, user, connection)
+
+    @app.post("/admin/requests/{request_id}/approve", response_class=HTMLResponse, tags=["admin"])
+    def approve_request(
+        request_id: int,
+        request: Request,
+        admin: Annotated[object, Depends(require_admin)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        account_username: Annotated[str, Form()] = "",
+        account_password: Annotated[str, Form()] = "",
+        csrf_token: Annotated[str, Form()] = "",
+    ) -> HTMLResponse:
+        require_form_csrf(request, csrf_token)
+        account_request = repo.get_account_request(connection, request_id)
+        if account_request is None:
+            raise HTTPException(status_code=404, detail="Request not found.")
+        if account_request["status"] != "pending":
+            return render_admin_requests(
+                request, admin, connection,
+                error="That request has already been decided.",
+                status_code=409,
+            )
+        username = account_username.strip() or account_request["username"]
+        error = validate_username(username)
+        password = account_password or None
+        if error is None and password is not None:
+            error = validate_password(password)
+        if error is None and repo.get_user_by_username(connection, username) is not None:
+            error = f"The account name {username!r} is already taken; choose another."
+        if error is not None:
+            return render_admin_requests(request, admin, connection, error=error, status_code=400)
+
+        final_password = password if password is not None else generate_temporary_password()
+        with connection:
+            salt, digest = hash_password(final_password)
+            try:
+                user_id = repo.create_user(
+                    connection, username, salt, digest, utc_now(), role="user"
+                )
+            except repo.UsernameTaken:
+                user_id = None
+            if user_id is None:
+                return render_admin_requests(
+                    request, admin, connection,
+                    error=f"The account name {username!r} is already taken; choose another.",
+                    status_code=400,
+                )
+            decided = repo.decide_account_request(
+                connection, request_id, "approved", int(admin["id"]), utc_now(), user_id
+            )
+            if not decided:
+                # Lost a race with another decision: roll back the created account.
+                raise HTTPException(status_code=409, detail="That request has already been decided.")
+        return render_credentials(
+            request,
+            admin,
+            username,
+            final_password,
+            heading="Account created",
+            detail="Hand these credentials to the requester so they can log in. "
+            "The password is shown only on this page and is never stored in plain text. "
+            "If they lose it later, an administrator can reset it from the request queue.",
+        )
+
+    @app.post("/admin/requests/{request_id}/reject", tags=["admin"])
+    def reject_request(
+        request_id: int,
+        request: Request,
+        admin: Annotated[object, Depends(require_admin)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str, Form()] = "",
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        account_request = repo.get_account_request(connection, request_id)
+        if account_request is None:
+            raise HTTPException(status_code=404, detail="Request not found.")
+        with connection:
+            decided = repo.decide_account_request(
+                connection, request_id, "rejected", int(admin["id"]), utc_now()
+            )
+        if not decided:
+            return render_admin_requests(
+                request, admin, connection,
+                error="That request has already been decided.",
+                status_code=409,
+            )
+        return RedirectResponse("/admin/requests", status_code=303)
+
+    @app.post("/admin/users/{user_id}/reset-password", response_class=HTMLResponse, tags=["admin"])
+    def reset_user_password(
+        user_id: int,
+        request: Request,
+        admin: Annotated[object, Depends(require_admin)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str, Form()] = "",
+    ) -> HTMLResponse:
+        require_form_csrf(request, csrf_token)
+        target = repo.get_user_by_id(connection, user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Account not found.")
+        if target["role"] == "admin":
+            return render_admin_requests(
+                request, admin, connection,
+                error="Administrator passwords cannot be reset here; use the "
+                "create_admin command with --password instead.",
+                status_code=400,
+            )
+        new_password = generate_temporary_password()
+        with connection:
+            salt, digest = hash_password(new_password)
+            repo.set_user_password(connection, user_id, salt, digest)
+            repo.delete_user_sessions(connection, user_id)
+        return render_credentials(
+            request,
+            admin,
+            target["username"],
+            new_password,
+            heading="Password reset",
+            detail="A temporary password was generated and all existing sessions for "
+            "this account were signed out. Hand the new password to the user; it is "
+            "shown only on this page and is never stored in plain text.",
+        )
 
     # --- Deck page ----------------------------------------------------------
 
