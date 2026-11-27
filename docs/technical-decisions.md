@@ -110,6 +110,24 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Keep one deck; prompt for a custom name at creation; migrate existing data to a differently named default; use a separate deck-specific page hierarchy.
 - **Consequences:** Schema v3 associates cards with both their owner and deck. The v2 → v3 migration preserves existing card records and saved ordering. Deck-specific queries and API paths must validate ownership on every request.
 
+## TD-013: Account-local custom deck names and rename
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Issue #2 extends generated deck names so users can identify topic-specific decks and correct names later without disturbing their cards.
+- **Decision:** Allow an optional custom name during deck creation and allow owners to rename existing decks. Trim names, require 1–100 characters, and enforce case-insensitive uniqueness per account with the existing database constraint. A blank create field retains generated `My Deck N` behavior; generated numbering advances beyond the highest existing numeric suffix. Rename changes only `decks.name`, so card identity, timestamps, and persisted Review order remain unchanged. Foreign deck IDs return 404.
+- **Alternatives considered:** Require custom names for every new deck; allow duplicates; store rename history; make renaming create a replacement deck.
+- **Consequences:** Deck labels become meaningful without changing deck identity or card relationships. Concurrent conflicting writes cannot create duplicates because SQLite remains authoritative; callers receive a validation error instead. Delete, sharing, and import/export remain tracked by #3–#5.
+
+## TD-014: Delete only empty, non-last decks
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Issue #3 requires users to remove unused decks without allowing an accidental deck action to destroy cards or leave an account with no usable deck.
+- **Decision:** Expose an owner-only, CSRF-protected delete form with explicit browser confirmation. The repository performs one conditional `DELETE` that succeeds only when the owned deck has no cards and the owner currently has more than one deck. Failed requests are classified after the guarded write for actionable errors; foreign and missing IDs remain indistinguishable 404 responses.
+- **Alternatives considered:** Cascade-delete cards; require users to move cards automatically; soft-delete/archive; rely only on disabled UI controls or pre-write checks.
+- **Consequences:** Deck deletion is permanent but cannot remove cards or the final deck. The single guarded SQL write remains authoritative under stale pages or competing requests. Public share records introduced by #4 must reference decks with `ON DELETE CASCADE` so an eligible deletion also revokes access.
+
 ## Superseded decisions
 
 - Browser-only static app with `localStorage`.

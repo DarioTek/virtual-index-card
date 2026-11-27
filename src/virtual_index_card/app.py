@@ -20,6 +20,7 @@ from .config import Settings, load_settings
 from .db import connect, initialize
 from .domain import (
     ValidationError,
+    clean_deck_name,
     clean_note,
     shuffled_cards,
     utc_now,
@@ -577,17 +578,103 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Deck not found.")
         return deck
 
+    def render_deck_page(
+        request: Request,
+        user: object,
+        connection: Connection,
+        deck: object,
+        error: str | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "deck.html",
+            {
+                "user": user,
+                "deck": deck,
+                "decks": repo.list_decks(connection, int(user["id"])),
+                "cards": repo.list_cards_newest_first(
+                    connection, int(user["id"]), int(deck["id"])
+                ),
+                "deck_error": error,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+            status_code=status_code,
+        )
+
     @app.post("/decks", tags=["decks"])
     def create_deck_page(
         request: Request,
         user: Annotated[object, Depends(require_user)],
         connection: Annotated[Connection, Depends(get_connection)],
         csrf_token: Annotated[str | None, Form()] = None,
+        name: Annotated[str | None, Form()] = None,
+        current_deck_id: Annotated[int | None, Form()] = None,
     ) -> Response:
         require_form_csrf(request, csrf_token)
-        with connection:
-            deck = repo.create_deck(connection, int(user["id"]), utc_now())
+        selected = require_selected_deck(
+            connection, int(user["id"]), current_deck_id
+        )
+        try:
+            clean_name = clean_deck_name(name) if name not in (None, "") else None
+            with connection:
+                deck = repo.create_deck(
+                    connection, int(user["id"]), utc_now(), clean_name
+                )
+        except (ValidationError, repo.DeckNameTaken) as exc:
+            return render_deck_page(
+                request, user, connection, selected, str(exc), status_code=400
+            )
         return RedirectResponse(f"/?deck_id={deck['id']}", status_code=303)
+
+    @app.post("/decks/{deck_id}/rename", tags=["decks"])
+    def rename_deck_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        name: Annotated[str, Form()],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        try:
+            clean_name = clean_deck_name(name)
+            with connection:
+                renamed = repo.rename_deck(
+                    connection, int(user["id"]), deck_id, clean_name
+                )
+        except (ValidationError, repo.DeckNameTaken) as exc:
+            return render_deck_page(
+                request, user, connection, deck, str(exc), status_code=400
+            )
+        if renamed is None:
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        return RedirectResponse(f"/?deck_id={deck_id}", status_code=303)
+
+    @app.post("/decks/{deck_id}/delete", tags=["decks"])
+    def delete_deck_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        with connection:
+            result = repo.delete_empty_deck(connection, int(user["id"]), deck_id)
+        if result == "deleted":
+            return RedirectResponse("/", status_code=303)
+        if result == "not_found":
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        if result == "not_empty":
+            error = "Only empty decks can be deleted. Delete its cards first."
+        else:
+            error = "You must keep at least one deck."
+        return render_deck_page(
+            request, user, connection, deck, error, status_code=409
+        )
 
     @app.get("/", response_class=HTMLResponse, tags=["ui"])
     def deck_page(
@@ -599,20 +686,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if user is None:
             return RedirectResponse("/login", status_code=303)
         deck = require_selected_deck(connection, int(user["id"]), deck_id)
-        decks = repo.list_decks(connection, int(user["id"]))
-        return templates.TemplateResponse(
-            request,
-            "deck.html",
-            {
-                "user": user,
-                "deck": deck,
-                "decks": decks,
-                "cards": repo.list_cards_newest_first(
-                    connection, int(user["id"]), int(deck["id"])
-                ),
-                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
-            },
-        )
+        return render_deck_page(request, user, connection, deck)
 
     @app.get("/review", response_class=HTMLResponse, tags=["ui"])
     def review_page(

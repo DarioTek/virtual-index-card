@@ -2,7 +2,13 @@ import random
 
 import pytest
 
-from virtual_index_card.domain import Card, ValidationError, clean_note, shuffled_cards
+from virtual_index_card.domain import (
+    Card,
+    ValidationError,
+    clean_deck_name,
+    clean_note,
+    shuffled_cards,
+)
 
 
 def make_card(card_id: int, position: int) -> Card:
@@ -45,3 +51,12 @@ def test_clean_note_trims_and_validates() -> None:
         clean_note("   ", "Front")
     with pytest.raises(ValidationError):
         clean_note("x" * 5001, "Back")
+
+
+def test_clean_deck_name_trims_and_validates_boundaries() -> None:
+    assert clean_deck_name("  Biology  ") == "Biology"
+    assert clean_deck_name("x" * 100) == "x" * 100
+    with pytest.raises(ValidationError, match="must not be empty"):
+        clean_deck_name("   ")
+    with pytest.raises(ValidationError, match="at most 100"):
+        clean_deck_name("x" * 101)

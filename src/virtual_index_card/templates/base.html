@@ -5,34 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token|default('', true) }}">
   <title>{% block title %}Virtual Index Cards{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v=modern-1">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="site-header">
-    <a class="brand" href="/">Virtual Index Cards</a>
-    {% if user %}
-    <div class="header-right">
-      <nav class="main-nav" aria-label="Main navigation">
-        {% if deck is defined and deck %}
-        <a href="/?deck_id={{ deck['id'] }}">Deck</a>
-        <a href="/review?deck_id={{ deck['id'] }}">Review</a>
-        {% else %}
-        <a href="/">Deck</a>
-        <a href="/review">Review</a>
-        {% endif %}
-        {% if user['role'] == 'admin' %}<a href="/admin/requests">Requests</a><a href="/admin/users">Users</a><a href="/admin/profile">Profile</a>{% endif %}
-      </nav>
-      <div class="account">
-        <span class="username">{{ user['username'] }}</span>
-        <form class="logout-form" method="post" action="/logout">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token|default('', true) }}">
-          <button type="submit">Log out</button>
-        </form>
+    <div class="header-shell">
+      <a class="brand" href="/" aria-label="Virtual Index Cards home">
+        <span class="brand-mark" aria-hidden="true">V</span>
+        <span class="brand-copy"><strong>Virtual Index Cards</strong><small>Notes, organized</small></span>
+      </a>
+      {% if user %}
+      <div class="header-right">
+        <nav class="main-nav" aria-label="Main navigation">
+          {% if deck is defined and deck %}
+          <a href="/?deck_id={{ deck['id'] }}">Deck</a>
+          <a href="/review?deck_id={{ deck['id'] }}">Review</a>
+          {% else %}
+          <a href="/">Deck</a>
+          <a href="/review">Review</a>
+          {% endif %}
+          {% if user['role'] == 'admin' %}<a href="/admin/requests">Requests</a><a href="/admin/users">Users</a><a href="/admin/profile">Profile</a>{% endif %}
+        </nav>
+        <div class="account">
+          <span class="username" title="Signed in account">{{ user['username'] }}</span>
+          <form class="logout-form" method="post" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token|default('', true) }}">
+            <button type="submit" class="quiet-button">Log out</button>
+          </form>
+        </div>
       </div>
+      {% endif %}
     </div>
-    {% endif %}
   </header>
-  <main class="page">
+  <main class="page" id="main-content">
     {% block content %}{% endblock %}
   </main>
   {% block scripts %}{% endblock %}

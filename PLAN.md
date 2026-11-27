@@ -1,90 +1,112 @@
-# Active plan: Multiple decks (#1)
+# Active plan: Complete multiple-deck management (#1)
 
 ## Objective
 
-Implement support for each account to create and select multiple independent card decks. Newly created decks use the next account-local default name (`My Deck 1`, `My Deck 2`, and so on). Preserve existing users' cards and Review order by migrating them into `My Deck 1`.
+Deliver the full [multiple-deck epic #1](https://github.com/DarioTek/virtual-index-card/issues/1) through its child issues: custom names and rename (#2), safe empty-deck deletion (#3), revocable public read-only links (#4), and versioned JSON import/export (#5). Preserve existing card data, account isolation, and per-deck Review order throughout.
 
 ## Confirmed scope and decisions
 
-- Issue: [#1 — Create Multiple Decks for Different Topics](https://github.com/DarioTek/virtual-index-card/issues/1).
-- Add deck creation and selection to the existing application; deck cards and saved Review order must remain isolated.
-- Existing schema-v2 accounts receive one `My Deck 1` containing all their current cards with IDs, content, timestamps, and positions unchanged.
-- Newly approved accounts start with an empty `My Deck 1`. Additional decks are created in sequence per account.
-- Keep the existing `/` and `/review` URLs; `deck_id` selects the current deck, omitted selection uses that account's first deck, and invalid/foreign IDs return 404.
-- Rename/delete/share/import of decks are outside this request and are not included.
+- #1 is the epic and remains open until #2–#5 are complete, their pull requests are merged, the complete automated suite passes, and documentation is current.
+- The existing schema-v3 multiple-deck implementation is the baseline: new and upgraded accounts receive `My Deck 1`; cards and Review order are deck-scoped.
+- Deck names are trimmed, non-empty, at most 100 characters, and case-insensitively unique per account. Generated `My Deck N` names remain available.
+- Only empty decks may be deleted, and an account must retain at least one deck.
+- Public sharing is anonymous, unlisted, read-only, revocable, and valid until revoked or rotated. Public users cannot persist shuffle or any other mutation.
+- Import/export uses versioned full-fidelity JSON. Import creates a new deck, never overwrites, is atomic, and observes documented configurable byte/card limits.
+- A complete passing automated suite is sufficient; manual browser testing is not a closure requirement.
+- `PROJECT_GUIDELINES.md` is not present. The Definition of Done is the completion checklist in `AGENTS.md` plus the issue acceptance criteria.
 
-## Tasks
+## Delivery order and tasks
 
-| # | Task | Status |
-|---|---|---|
-| 1 | Confirm issue scope and default naming/migration behavior | Completed |
-| 2 | Add schema-v3 decks table and lossless v2 migration | Completed |
-| 3 | Add account-owned deck persistence and deck-scoped card/order queries | Completed |
-| 4 | Add deck creation/selection UI and carry selected deck through Review and card APIs | Completed |
-| 5 | Add migration, multi-deck, isolation, and regression tests | In Progress |
-| 6 | Update README, architecture, and technical decision documentation | Completed |
-| 7 | Run available validations and review diff | Blocked |
-| 8 | Fix regression: card creation from a non-default selected deck | Completed |
+| # | Task | Related issue | Likely components | Status |
+|---|---|---|---|---|
+| 1 | Re-establish a test-capable environment and verify the existing multi-deck baseline | #1 | dependency environment, complete test suite | Completed |
+| 2 | Add validated custom deck creation and account-scoped rename, including concurrency-safe uniqueness | #2 | `domain.py`, `repository.py`, `app.py`, deck template, tests | Completed |
+| UI | Modernize the shared responsive layout, navigation, forms, cards, review view, and admin tables for desktop and mobile | User request | templates, `static/styles.css`, responsive regression checks | Completed |
+| 3 | Add transactional empty-deck deletion with last-deck protection and confirmation UI | #3 | `repository.py`, `app.py`, deck template, tests | Completed |
+| 4 | Design and migrate storage for hashed public-share tokens; add owner controls and anonymous read-only Review | #4 | `db.py`, `security.py`, `repository.py`, `app.py`, templates, tests | Not Started |
+| 5 | Define the versioned JSON format and configurable limits; add transactional export/import | #5 | `config.py`, `domain.py`, `repository.py`, `app.py`, templates, tests, docs | Not Started |
+| 6 | Run full regression/security/migration validation and reconcile all documentation | #1–#5 | tests, README, architecture, technical decisions | Not Started |
+| 7 | Review the final diff and prepare issue-linked commit/pull-request reporting | #1–#5 | repository and GitHub metadata | Not Started |
+
+Each child issue will be implemented as a focused logical unit in dependency order. Status will be updated before and after each unit.
 
 ## Acceptance criteria
 
-- [ ] New accounts start with one empty `My Deck 1`; creating additional decks names them sequentially (`My Deck 2`, etc.) per account.
-- [ ] Authenticated users can select among their decks on management and Review pages and create a deck from the app.
-- [ ] Card creation, editing, deletion, listing, shuffle, and saved Review order apply only to the selected deck.
-- [ ] Deck IDs belonging to another account cannot be used to view or mutate its cards.
-- [ ] Schema-v2 migration creates `My Deck 1` for each account and preserves all existing card data and positions.
-- [ ] Existing routes remain usable and choose a safe default deck when no selection is specified.
-- [ ] Tests cover fresh schema, migration, naming, selection, deck isolation, and existing single-deck/auth/CSRF behavior.
-- [x] Relevant docs describe the implemented multi-deck model; `git diff --check` passes.
+### Existing core and migration
+
+- [x] New accounts start with exactly one empty `My Deck 1`; generated names remain sequential per account.
+- [x] CRUD, Review, and persisted shuffle are isolated to the selected deck.
+- [x] Invalid or foreign deck IDs fail without disclosing another account's data.
+- [x] Existing schema-v2 migration preserves card IDs, ownership, content, timestamps, and Review positions.
+
+### #2 — custom names and rename
+
+- [x] Valid custom names can be supplied during creation and existing owned decks can be renamed.
+- [x] Names are trimmed, 1–100 characters, and unique per account case-insensitively; the database constraint is authoritative for conflicting writes.
+- [x] Rename preserves cards, timestamps, and Review order; foreign deck IDs fail safely.
+
+### Responsive visual refresh
+
+- [x] Shared header, navigation, page spacing, typography, buttons, and forms use a cohesive professional design system.
+- [x] Deck management, card grids, Review, authentication, and administration layouts adapt at desktop, tablet, and phone breakpoints without requiring application JavaScript.
+- [x] Mobile controls remain touch-friendly; navigation and wide admin tables remain reachable without page-level horizontal overflow.
+- [x] Keyboard focus, skip navigation, reduced-motion behavior, contrast-aware status treatments, and existing semantic labels are preserved or improved.
+
+### #3 — empty-deck deletion
+
+- [x] An owner can delete an empty non-last deck after confirmation.
+- [x] Non-empty, last, foreign, and nonexistent deck deletion attempts are rejected transactionally.
+- [ ] Any associated public link is invalid after eligible deletion. (Integration is deferred to #4 because share records do not exist yet; TD-014 requires `ON DELETE CASCADE`.)
+
+### #4 — public read-only sharing
+
+- [ ] Owners can generate, rotate, and revoke unlisted links backed by unguessable tokens not stored in plaintext where avoidable.
+- [ ] Anonymous viewers can view, navigate, and flip only the shared deck without persisting changes.
+- [ ] Invalid/revoked links and all mutation attempts fail safely without account or deck information leakage.
+
+### #5 — JSON import/export
+
+- [ ] Owned decks export to documented, versioned JSON without credentials, internal ownership IDs, sessions, or sharing tokens.
+- [ ] Import creates a new uniquely named deck and round-trips card text and Review order.
+- [ ] Malformed, incompatible, invalid, collision-prone, or over-limit imports fail atomically.
+- [ ] Upload-byte and card-count limits are configurable and documented with defaults.
+
+### Definition of Done
+
+- [ ] Focused unit/integration/security/migration tests cover success, boundary, ownership, and error paths. (#2 and #3 coverage complete; #4–#5 pending.)
+- [ ] `uv run pytest -q`, JavaScript syntax validation, Python compilation, and `git diff --check` pass.
+- [ ] README, architecture, technical decisions, configuration, and operator guidance describe the as-built behavior.
+- [ ] No unrelated changes, generated artifacts, secrets, or database files are included.
+- [ ] Child work is linked to issues/PRs as authorized; #1 is not closed before all child PRs merge.
 
 ## Validation strategy
 
-- Run pytest for repository, migration, and FastAPI integration behavior; run `git diff --check` and JavaScript syntax validation if applicable.
-- No Python test dependencies are currently installed (`pytest`, FastAPI, and httpx are unavailable), and `uv` is absent. Do not install packages without the user's approval; report test execution as blocked if this remains the case.
-- Inspect migration fixtures and final diff for data preservation, cross-account access, and unintended changes.
+1. Establish the baseline with `uv sync --group dev` and `uv run pytest -q` before feature changes.
+2. For each child issue, add repository/domain tests first where practical, then HTTP integration and authorization/error-path coverage.
+3. Re-run focused tests during implementation and the complete suite at every child milestone.
+4. Validate schema upgrades with representative old databases and verify transactional rollback for destructive/import operations.
+5. Run `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check` before completion.
+6. Inspect the final diff and Git status for unrelated or sensitive files.
 
-## Risks
+## Dependencies and risks
 
-- Schema migration must preserve every existing card and Review position; test against a representative v2 database.
-- Deck selection must be validated against the authenticated account on every route/API call, not trusted from the query string.
-- Any legacy endpoint without `deck_id` must resolve only to the authenticated user's default deck.
+- #2 should precede #5 because imported names use the same validation and uniqueness rules.
+- #3 must integrate with #4 so deletion invalidates public access.
+- #4 requires a schema migration and expands the unauthenticated attack surface; token storage, cache behavior, and non-disclosure need security-focused review.
+- #5 processes untrusted input; byte/card limits, schema validation, and an all-or-nothing transaction are required.
+- SQLite write concurrency may expose naming or last-deck race conditions; database constraints and transactional checks must be authoritative.
+- Existing installations are durable-data systems. Every schema migration must preserve data and fail loudly on unsupported versions.
 
 ## Open questions
 
-- None blocking for the requested create/select behavior. Naming is per account and deck rename/delete are intentionally deferred.
-
-## Proposed Issues
-
-Drafts only; no GitHub Issues created or modified.
-
-### Add CI checks for tests and basic quality gates
-
-- **Description:** Add a lightweight automated workflow using the committed lockfile to run tests and suitable syntax checks.
-- **Acceptance criteria:** Runs on pull requests and primary-branch pushes; test failures fail the workflow; no secrets are required.
-- **Suggested labels:** `automation`, `testing`, `priority: medium`
-
-### Verify HTTPS reverse-proxy deployment on the target host
-
-- **Description:** Exercise the Raspberry Pi runbook and verify proxy, HTTPS/cookie behavior, security headers, and application flows before public exposure.
-- **Acceptance criteria:** Record target host/domain; verify HTTP-to-HTTPS redirect, proxy-only app access, secure cookies, and app flows; update the runbook with evidence.
-- **Suggested labels:** `deployment`, `security`, `priority: high`
-
-### Automate and rehearse off-device SQLite backups and restore
-
-- **Description:** Configure protected off-device backups and perform a restore drill with retention and recovery steps documented.
-- **Acceptance criteria:** Consistent database backup; separate destination; protected access; failure visibility; documented and verified restore procedure.
-- **Suggested labels:** `operations`, `data-safety`, `priority: high`
-
-### Add authentication abuse protections and complete a privacy/threat review
-
-- **Description:** Review hosted-notes risks and implement proportionate account-request and login abuse controls with privacy guidance.
-- **Acceptance criteria:** Record assets, trust boundaries, and mitigations; test abuse controls and safe failures; document sensitive-data handling and retention.
-- **Suggested labels:** `security`, `privacy`, `priority: high`
+- None currently blocking. Defaults for configurable import limits and the exact JSON schema version will be selected during #5, documented, and covered by tests.
 
 ## Progress log
 
-- 2026-11-27: Issue #1 implementation authorized. User confirmed sequential `My Deck 1`, `My Deck 2`, ... default names. Scope set to deck creation and selection; rename/delete are deferred.
-- 2026-11-27: Implemented schema v3 and v2→v3 migration, account-owned deck persistence, deck selector/create form, selected-deck card and Review operations, and regression tests. Existing schema-v2 cards retain IDs, content, timestamps, and positions in `My Deck 1`.
-- 2026-11-27: `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check` passed. Manual SQLite/repository smoke checks passed for fresh schema, sequential naming, ownership isolation, v1→v3 and v2→v3 migrations, data/order preservation, foreign keys, and post-migration card ID continuation.
-- 2026-11-27: User reported cards created from `My Deck 2` were landing in `My Deck 1`. The cards API intentionally falls back to the first deck when `deck_id` is omitted, so the client must always send the selected deck explicitly. Bound the create form directly to its selected `deck_id`, use that form context in JavaScript, and version the static script URL to avoid a stale cached client. Added a regression assertion for rendered deck context.
-- 2026-11-27: `node --check` and a Node harness simulating the form submit passed; the request was `/api/cards?deck_id=2`. Python compilation and `git diff --check` passed. Full pytest remains unavailable because `uv`, pytest, FastAPI, and httpx are absent; dependencies were not installed. Runtime HTTP/template integration remains unverified; task 5 and task 7 remain open/blocked pending a test-capable environment.
+- 2026-11-27: Original multiple-deck creation/selection, schema-v3 migration, deck-scoped CRUD/Review/shuffle, and supporting documentation were implemented on the baseline commit. A selected-deck card-creation regression was fixed. Full pytest had not been run in that earlier environment.
+- 2026-11-27: #1 was expanded and groomed as an epic. Child issues #2–#5, repository-wide priority labels, and the `Multiple Deck Support` milestone were created.
+- 2026-11-27: User authorized starting #1. Re-read the live epic and child issues, confirmed a clean branch, replaced the obsolete plan with this dependency-ordered delivery plan, and began restoring baseline test validation.
+- 2026-11-27: System Python correctly rejected a user-level `pip install uv` under PEP 668. Installed `uv` in an isolated `/tmp` bootstrap environment, synchronized the committed development environment, and ran the baseline suite. The first run found one stale empty-Review copy assertion (67 passed, 1 failed); updated it to the implemented deck-specific message.
+- 2026-11-27: Completed #2 implementation: shared 100-character name validation, optional custom creation, sequential generation beyond existing numeric names, account-scoped rename, database-backed case-insensitive uniqueness errors, form UI, ownership/CSRF handling, tests, and documentation. Focused tests passed (29); the complete suite passed (72) with one existing Starlette/httpx deprecation warning. Python compilation, JavaScript syntax validation, and `git diff --check` also passed. Next: implement transactional empty-deck deletion for #3.
+- 2026-11-27: Completed the user-requested responsive visual refresh. Added a cohesive color/type/spacing system, sticky translucent header, compact brand treatment, responsive navigation, polished panels/forms/cards/Review/admin states, touch-sized mobile controls, table overflow handling, skip navigation, and reduced-motion support. Verified served login/CSS assets through the live preview, including responsive breakpoints. The complete suite passed (72) with the existing deprecation warning; Python compilation, JavaScript syntax validation, and `git diff --check` passed.
+- 2026-11-27: Completed #3's available implementation. Added a CSRF-protected confirmed delete action, disabled-state guidance, and a single conditional SQL delete that atomically requires ownership, no cards, and more than one owned deck. Stale-page, non-empty, last-deck, foreign-ID, missing-CSRF, first-listed deletion, and successful deletion paths are covered. Updated README, architecture, and TD-014. Focused tests passed (26); the complete suite passed (74) with the existing deprecation warning. Public-link cleanup remains explicitly deferred to #4, whose share-table foreign key must cascade on deck deletion.

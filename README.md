@@ -1,6 +1,6 @@
 # virtual-index-card
 
-A hosted web application for personal index cards. Each approved account can create multiple private decks, named sequentially by default (`My Deck 1`, `My Deck 2`, ...). Write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the selected deck, and that review order persists across reloads.
+A hosted web application for personal index cards. Each approved account can create multiple private decks, named sequentially by default (`My Deck 1`, `My Deck 2`, ...), or give them unique custom names and rename them later. Write notes on a card's front and back, flip between them, and add/edit/delete cards. The management page lists newest-created cards first; in Review mode you can shuffle the selected deck, and that review order persists across reloads.
 
 New accounts are **created by an administrator**: visitors submit an account request, an administrator approves it, and the system issues the account name and password to hand to the user.
 
@@ -11,7 +11,7 @@ All durable data â€” accounts, sessions, decks, cards, and per-deck card order â
 - Administrator-approved accounts: visitors request an account; an administrator approves or rejects the request and receives the new account's credentials to deliver out of band.
 - Individual accounts with login and logout.
 - Administrator role with an account-request queue, one-time credential display, password reset (which signs the user out everywhere), a **Users page listing every account** with delete (permanent) and reset actions, an **Admin profile page** to update the administrator's username and password (current password required; other sessions are signed out), and a first-admin bootstrap command/env vars.
-- Multiple private decks per account, created with sequential default names; users cannot see or modify another account's decks or cards.
+- Multiple private decks per account with sequential defaults or unique custom names; owners can rename decks and permanently delete empty non-last decks, while users cannot see or modify another account's decks or cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
 - Plain-text notes with safe HTML escaping.

@@ -49,6 +49,73 @@ def test_decks_are_account_scoped_and_cards_are_independent(
     assert repo.list_cards(connection, bob) == []
 
 
+def test_custom_deck_names_and_rename_are_account_scoped(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    biology = repo.create_deck(connection, alice, utc_now(), "Biology")
+    bob_biology = repo.create_deck(connection, bob, utc_now(), "biology")
+    card = repo.create_card(
+        connection, alice, "cell", "membrane", utc_now(), int(biology["id"])
+    )
+
+    with pytest.raises(repo.DeckNameTaken):
+        repo.create_deck(connection, alice, utc_now(), "BIOLOGY")
+
+    renamed = repo.rename_deck(
+        connection, alice, int(biology["id"]), "Life Sciences"
+    )
+    assert renamed is not None and renamed["name"] == "Life Sciences"
+    assert repo.get_deck(connection, bob, int(biology["id"])) is None
+    assert repo.rename_deck(connection, bob, int(biology["id"]), "Stolen") is None
+    assert repo.get_deck(connection, bob, int(bob_biology["id"]))["name"] == "biology"
+    preserved = repo.list_cards(connection, alice, int(biology["id"]))
+    assert [item.id for item in preserved] == [card.id]
+    assert [item.position for item in preserved] == [0]
+
+
+def test_generated_deck_names_advance_past_custom_numeric_names(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    repo.create_deck(connection, alice, utc_now(), "My Deck 7")
+    generated = repo.create_deck(connection, alice, utc_now())
+    assert generated["name"] == "My Deck 8"
+
+
+def test_empty_deck_deletion_preserves_cards_and_a_last_deck(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    alice_first = repo.get_deck(connection, alice)
+    bob_first = repo.get_deck(connection, bob)
+    assert alice_first is not None and bob_first is not None
+    alice_second = repo.create_deck(connection, alice, utc_now())
+    alice_third = repo.create_deck(connection, alice, utc_now())
+    repo.create_card(
+        connection, alice, "keep", "this", utc_now(), int(alice_second["id"])
+    )
+
+    assert (
+        repo.delete_empty_deck(connection, bob, int(alice_third["id"]))
+        == "not_found"
+    )
+    assert (
+        repo.delete_empty_deck(connection, alice, int(alice_second["id"]))
+        == "not_empty"
+    )
+    assert repo.delete_empty_deck(connection, alice, int(alice_first["id"])) == "deleted"
+    assert repo.delete_empty_deck(connection, alice, int(alice_third["id"])) == "deleted"
+    assert repo.get_deck(connection, alice, int(alice_first["id"])) is None
+    assert repo.get_deck(connection, alice, int(alice_third["id"])) is None
+    assert [deck["id"] for deck in repo.list_decks(connection, alice)] == [
+        alice_second["id"],
+    ]
+    assert repo.delete_empty_deck(connection, bob, int(bob_first["id"])) == "last_deck"
+
+
 def test_card_crud_is_scoped_to_user(connection: sqlite3.Connection) -> None:
     alice = add_user(connection, "alice")
     bob = add_user(connection, "bob")
