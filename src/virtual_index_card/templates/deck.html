@@ -5,6 +5,15 @@
   <div>
     <h1>{{ deck['name'] }}</h1>
     <p class="card-count">{{ cards|length }} card{% if cards|length != 1 %}s{% endif %}</p>
+    <form method="post" action="/decks/{{ deck['id'] }}/delete" class="deck-delete-form"
+          onsubmit="return confirm('Delete this empty deck? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger small"
+              {% if cards or decks|length == 1 %}disabled{% endif %}
+              title="{% if cards %}Delete all cards before deleting this deck{% elif decks|length == 1 %}You must keep at least one deck{% else %}Permanently delete this empty deck{% endif %}">
+        Delete empty deck
+      </button>
+    </form>
   </div>
   <div class="deck-controls">
     <form method="get" action="/" class="deck-picker">

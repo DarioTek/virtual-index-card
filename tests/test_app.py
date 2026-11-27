@@ -267,6 +267,72 @@ def test_custom_deck_creation_and_rename_validation(client: TestClient) -> None:
     ).status_code == 200
 
 
+def test_empty_deck_deletion_requires_csrf_and_preserves_protected_decks(
+    client: TestClient,
+) -> None:
+    register(client, "alice")
+    csrf = client.cookies.get("vic_csrf")
+    first_page = client.get("/")
+    first_deck_id = int(re.search(r'data-deck-id="(\d+)"', first_page.text).group(1))
+
+    last_deck = client.post(
+        f"/decks/{first_deck_id}/delete",
+        data={"csrf_token": csrf},
+    )
+    assert last_deck.status_code == 409
+    assert "keep at least one deck" in last_deck.text
+
+    second = client.post(
+        "/decks",
+        data={"csrf_token": csrf, "current_deck_id": first_deck_id},
+        follow_redirects=False,
+    )
+    second_id = int(second.headers["location"].split("deck_id=")[1])
+    second_page = client.get(second.headers["location"])
+    assert f'action="/decks/{second_id}/delete"' in second_page.text
+    assert "return confirm('Delete this empty deck? This cannot be undone.')" in second_page.text
+    assert client.post(
+        f"/decks/{second_id}/delete", data={}, follow_redirects=False
+    ).status_code == 403
+
+    add = client.post(
+        f"/api/cards?deck_id={second_id}",
+        json={"front": "keep", "back": "me"},
+        headers=csrf_headers(client),
+    )
+    assert add.status_code == 201
+    non_empty = client.post(
+        f"/decks/{second_id}/delete",
+        data={"csrf_token": csrf},
+    )
+    assert non_empty.status_code == 409
+    assert "Only empty decks can be deleted" in non_empty.text
+    assert "keep" in client.get(f"/?deck_id={second_id}").text
+
+    third = client.post(
+        "/decks",
+        data={"csrf_token": csrf, "current_deck_id": second_id},
+        follow_redirects=False,
+    )
+    third_id = int(third.headers["location"].split("deck_id=")[1])
+    other = TestClient(create_app(client.app.state.settings))
+    register(other, "bob")
+    assert other.post(
+        f"/decks/{third_id}/delete",
+        data={"csrf_token": other.cookies.get("vic_csrf")},
+    ).status_code == 404
+
+    deleted = client.post(
+        f"/decks/{third_id}/delete",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert deleted.status_code == 303
+    assert deleted.headers["location"] == "/"
+    assert client.get(f"/?deck_id={third_id}").status_code == 404
+    assert "keep" in client.get(f"/?deck_id={second_id}").text
+
+
 def test_shuffle_order_persists_for_the_same_account(
     settings: Settings, client: TestClient
 ) -> None:

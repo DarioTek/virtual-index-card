@@ -84,6 +84,38 @@ def test_generated_deck_names_advance_past_custom_numeric_names(
     assert generated["name"] == "My Deck 8"
 
 
+def test_empty_deck_deletion_preserves_cards_and_a_last_deck(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    alice_first = repo.get_deck(connection, alice)
+    bob_first = repo.get_deck(connection, bob)
+    assert alice_first is not None and bob_first is not None
+    alice_second = repo.create_deck(connection, alice, utc_now())
+    alice_third = repo.create_deck(connection, alice, utc_now())
+    repo.create_card(
+        connection, alice, "keep", "this", utc_now(), int(alice_second["id"])
+    )
+
+    assert (
+        repo.delete_empty_deck(connection, bob, int(alice_third["id"]))
+        == "not_found"
+    )
+    assert (
+        repo.delete_empty_deck(connection, alice, int(alice_second["id"]))
+        == "not_empty"
+    )
+    assert repo.delete_empty_deck(connection, alice, int(alice_first["id"])) == "deleted"
+    assert repo.delete_empty_deck(connection, alice, int(alice_third["id"])) == "deleted"
+    assert repo.get_deck(connection, alice, int(alice_first["id"])) is None
+    assert repo.get_deck(connection, alice, int(alice_third["id"])) is None
+    assert [deck["id"] for deck in repo.list_decks(connection, alice)] == [
+        alice_second["id"],
+    ]
+    assert repo.delete_empty_deck(connection, bob, int(bob_first["id"])) == "last_deck"
+
+
 def test_card_crud_is_scoped_to_user(connection: sqlite3.Connection) -> None:
     alice = add_user(connection, "alice")
     bob = add_user(connection, "bob")

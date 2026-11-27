@@ -652,6 +652,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Deck not found.")
         return RedirectResponse(f"/?deck_id={deck_id}", status_code=303)
 
+    @app.post("/decks/{deck_id}/delete", tags=["decks"])
+    def delete_deck_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        with connection:
+            result = repo.delete_empty_deck(connection, int(user["id"]), deck_id)
+        if result == "deleted":
+            return RedirectResponse("/", status_code=303)
+        if result == "not_found":
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        if result == "not_empty":
+            error = "Only empty decks can be deleted. Delete its cards first."
+        else:
+            error = "You must keep at least one deck."
+        return render_deck_page(
+            request, user, connection, deck, error, status_code=409
+        )
+
     @app.get("/", response_class=HTMLResponse, tags=["ui"])
     def deck_page(
         request: Request,

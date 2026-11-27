@@ -119,6 +119,15 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Require custom names for every new deck; allow duplicates; store rename history; make renaming create a replacement deck.
 - **Consequences:** Deck labels become meaningful without changing deck identity or card relationships. Concurrent conflicting writes cannot create duplicates because SQLite remains authoritative; callers receive a validation error instead. Delete, sharing, and import/export remain tracked by #3–#5.
 
+## TD-014: Delete only empty, non-last decks
+
+- **Date:** 2026-11-27
+- **Status:** Accepted
+- **Context:** Issue #3 requires users to remove unused decks without allowing an accidental deck action to destroy cards or leave an account with no usable deck.
+- **Decision:** Expose an owner-only, CSRF-protected delete form with explicit browser confirmation. The repository performs one conditional `DELETE` that succeeds only when the owned deck has no cards and the owner currently has more than one deck. Failed requests are classified after the guarded write for actionable errors; foreign and missing IDs remain indistinguishable 404 responses.
+- **Alternatives considered:** Cascade-delete cards; require users to move cards automatically; soft-delete/archive; rely only on disabled UI controls or pre-write checks.
+- **Consequences:** Deck deletion is permanent but cannot remove cards or the final deck. The single guarded SQL write remains authoritative under stale pages or competing requests. Public share records introduced by #4 must reference decks with `ON DELETE CASCADE` so an eligible deletion also revokes access.
+
 ## Superseded decisions
 
 - Browser-only static app with `localStorage`.

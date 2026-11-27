@@ -4,7 +4,7 @@
 
 ## Product shape
 
-A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Notes are plain text; each card has a front and back. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
+A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Owners can permanently delete an empty deck after confirmation as long as the account retains at least one deck. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Notes are plain text; each card has a front and back. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
 
 ## Components
 
@@ -70,6 +70,7 @@ Indexes cover session expiry, account/deck card position, and request status. Fo
 | `GET` | `/?deck_id=N` | Newest-created-first management page for selected deck; missing ID selects first deck | Session |
 | `POST` | `/decks` | Create a custom-named deck, or the next sequential name when blank | Session + CSRF form token |
 | `POST` | `/decks/{id}/rename` | Rename an account-owned deck | Session + CSRF form token |
+| `POST` | `/decks/{id}/delete` | Permanently delete an empty owned deck while retaining at least one | Session + CSRF form token |
 | `GET` | `/review?deck_id=N&index=M` | Single-card Review in selected deck's saved order; shuffle control | Session |
 | `POST` | `/api/cards?deck_id=N` | Create card in selected deck; missing ID selects first deck | Session + `X-CSRF-Token` |
 | `PATCH` | `/api/cards/{id}?deck_id=N` | Edit a selected-deck card | Session + CSRF |
@@ -81,7 +82,7 @@ Indexes cover session expiry, account/deck card position, and request status. Fo
 1. **Request/approval/login:** a visitor files an account request (desired account name, optional contact/note). An administrator reviews `/admin/requests`; approving creates the account with the requested or an edited account name and either an admin-chosen or a generated temporary password, shown once on the result page. Approving/rejecting is decided atomically with `UPDATE ... WHERE status = 'pending'` so a decided request cannot be re-decided. Reset issues a new temporary password and deletes the user's sessions. Login hashes with PBKDF2-HMAC-SHA256 and a per-user salt; sessions store only SHA-256 hashes and are conveyed in HttpOnly cookies plus a readable CSRF cookie.
 2. **Flip:** the card's button toggles `aria-pressed` and a CSS class; the 3D transform reveals the back face. No server call.
 3. **CRUD:** JavaScript sends JSON with the CSRF header; the route validates text, writes through the repository, and the management page reloads sorted by `created_at DESC, id DESC`. Edits and Review shuffles do not change this view's order.
-4. **Deck creation, naming, and selection:** Each account starts with `My Deck 1`. The management and Review pages list only that account's decks; creating a deck uses a trimmed custom name or the next sequential name and opens it. Owners can rename a deck without changing its cards or Review order. Names are limited to 100 characters and protected by a case-insensitive per-account database uniqueness constraint. `deck_id` is resolved against the current account on every page and API request; unknown or foreign IDs return 404. Requests without an ID use that account's first deck for backwards compatibility; invalid or foreign IDs return 404.
+4. **Deck creation, naming, selection, and deletion:** Each account starts with `My Deck 1`. The management and Review pages list only that account's decks; creating a deck uses a trimmed custom name or the next sequential name and opens it. Owners can rename a deck without changing its cards or Review order. Names are limited to 100 characters and protected by a case-insensitive per-account database uniqueness constraint. An owner may permanently delete an empty deck after browser confirmation, but a single conditional delete rejects non-empty and last-deck requests atomically. `deck_id` is resolved against the current account on every page and API request; unknown or foreign IDs return 404. Requests without an ID use that account's first deck for backwards compatibility; invalid or foreign IDs return 404.
 5. **Shuffle:** The control appears only in Review (disabled with one card, absent with none). `shuffled_cards()` reorders the selected deck with Fisher–Yates, positions are rewritten in one transaction, and the browser stays on that deck at the first card of its saved new order. Reload uses the same order.
 6. **Review:** `/review` reads the selected deck's saved `position` order, shows one card with a `?index=` cursor, and uses the shared flip handler. Previous/next links retain the selected `deck_id` and wrap around; arrow keys also navigate. No server call is needed to flip.
 
@@ -107,7 +108,7 @@ The pytest suite covers domain/shuffle and username/password invariants, passwor
 
 ## Known limitations
 
-- Decks can be created with generated or custom names, selected, and renamed; delete, sharing, and import/export are not implemented.
+- Decks can be created with generated or custom names, selected, renamed, and deleted when empty and not the account's last deck; sharing and import/export are not implemented.
 - Plain text only; Markdown is `BL-004`.
 - No automatic delivery of credentials — the administrator relays them out of band; mail-based recovery remains `BL-024`.
 - No password reset when the administrator is unreachable; administrators reset passwords from the request queue or with `create_admin`.

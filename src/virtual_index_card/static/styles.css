@@ -236,6 +236,8 @@ label { color: var(--ink-soft); font-size: 0.88rem; font-weight: 650; }
 }
 .deck-header > div:first-child, .review-header > div:first-child { min-width: 12rem; }
 .card-count { margin: 0.42rem 0 0; color: var(--muted); font-size: 0.93rem; }
+.deck-delete-form { margin: 0.7rem 0 0; }
+.deck-delete-form button:disabled { border-color: var(--line); background: var(--surface-soft); color: var(--muted); }
 .muted, .optional { color: var(--muted); font-size: 0.82rem; font-weight: 450; }
 
 .deck-controls {

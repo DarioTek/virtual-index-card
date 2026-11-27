@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Sequence
+from typing import Literal, Sequence
 
 from .domain import Card
 from .security import hash_token  # noqa: F401  (kept for API symmetry in tests)
@@ -19,6 +19,7 @@ class DeckNameTaken(Exception):
 
 VALID_ROLES = ("admin", "user")
 VALID_REQUEST_STATUSES = ("pending", "approved", "rejected")
+DeckDeleteResult = Literal["deleted", "not_found", "not_empty", "last_deck"]
 
 
 def _validate_role(role: str) -> str:
@@ -316,6 +317,45 @@ def rename_deck(
     if cursor.rowcount == 0:
         return None
     return get_deck(connection, user_id, deck_id)
+
+
+def delete_empty_deck(
+    connection: sqlite3.Connection, user_id: int, deck_id: int
+) -> DeckDeleteResult:
+    """Atomically delete an owned deck only when it is empty and not the last one."""
+    cursor = connection.execute(
+        """
+        DELETE FROM decks
+        WHERE id = ? AND user_id = ?
+          AND NOT EXISTS (
+              SELECT 1 FROM cards
+              WHERE cards.deck_id = decks.id AND cards.user_id = decks.user_id
+          )
+          AND 1 < (SELECT COUNT(*) FROM decks AS owned WHERE owned.user_id = ?)
+        """,
+        (deck_id, user_id, user_id),
+    )
+    if cursor.rowcount == 1:
+        return "deleted"
+
+    state = connection.execute(
+        """
+        SELECT
+            EXISTS(
+                SELECT 1 FROM cards
+                WHERE cards.deck_id = decks.id AND cards.user_id = decks.user_id
+            ) AS has_cards,
+            (SELECT COUNT(*) FROM decks AS owned WHERE owned.user_id = ?) AS deck_count
+        FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (user_id, deck_id, user_id),
+    ).fetchone()
+    if state is None:
+        return "not_found"
+    if bool(state["has_cards"]):
+        return "not_empty"
+    return "last_deck"
 
 
 # --- Cards -----------------------------------------------------------------

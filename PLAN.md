@@ -22,7 +22,7 @@ Deliver the full [multiple-deck epic #1](https://github.com/DarioTek/virtual-ind
 | 1 | Re-establish a test-capable environment and verify the existing multi-deck baseline | #1 | dependency environment, complete test suite | Completed |
 | 2 | Add validated custom deck creation and account-scoped rename, including concurrency-safe uniqueness | #2 | `domain.py`, `repository.py`, `app.py`, deck template, tests | Completed |
 | UI | Modernize the shared responsive layout, navigation, forms, cards, review view, and admin tables for desktop and mobile | User request | templates, `static/styles.css`, responsive regression checks | Completed |
-| 3 | Add transactional empty-deck deletion with last-deck protection and confirmation UI | #3 | `repository.py`, `app.py`, deck template, tests | Not Started |
+| 3 | Add transactional empty-deck deletion with last-deck protection and confirmation UI | #3 | `repository.py`, `app.py`, deck template, tests | Completed |
 | 4 | Design and migrate storage for hashed public-share tokens; add owner controls and anonymous read-only Review | #4 | `db.py`, `security.py`, `repository.py`, `app.py`, templates, tests | Not Started |
 | 5 | Define the versioned JSON format and configurable limits; add transactional export/import | #5 | `config.py`, `domain.py`, `repository.py`, `app.py`, templates, tests, docs | Not Started |
 | 6 | Run full regression/security/migration validation and reconcile all documentation | #1–#5 | tests, README, architecture, technical decisions | Not Started |
@@ -54,9 +54,9 @@ Each child issue will be implemented as a focused logical unit in dependency ord
 
 ### #3 — empty-deck deletion
 
-- [ ] An owner can delete an empty non-last deck after confirmation.
-- [ ] Non-empty, last, foreign, and nonexistent deck deletion attempts are rejected transactionally.
-- [ ] Any associated public link is invalid after eligible deletion.
+- [x] An owner can delete an empty non-last deck after confirmation.
+- [x] Non-empty, last, foreign, and nonexistent deck deletion attempts are rejected transactionally.
+- [ ] Any associated public link is invalid after eligible deletion. (Integration is deferred to #4 because share records do not exist yet; TD-014 requires `ON DELETE CASCADE`.)
 
 ### #4 — public read-only sharing
 
@@ -73,7 +73,7 @@ Each child issue will be implemented as a focused logical unit in dependency ord
 
 ### Definition of Done
 
-- [ ] Focused unit/integration/security/migration tests cover success, boundary, ownership, and error paths. (#2 coverage complete; #3–#5 pending.)
+- [ ] Focused unit/integration/security/migration tests cover success, boundary, ownership, and error paths. (#2 and #3 coverage complete; #4–#5 pending.)
 - [ ] `uv run pytest -q`, JavaScript syntax validation, Python compilation, and `git diff --check` pass.
 - [ ] README, architecture, technical decisions, configuration, and operator guidance describe the as-built behavior.
 - [ ] No unrelated changes, generated artifacts, secrets, or database files are included.
@@ -109,3 +109,4 @@ Each child issue will be implemented as a focused logical unit in dependency ord
 - 2026-11-27: System Python correctly rejected a user-level `pip install uv` under PEP 668. Installed `uv` in an isolated `/tmp` bootstrap environment, synchronized the committed development environment, and ran the baseline suite. The first run found one stale empty-Review copy assertion (67 passed, 1 failed); updated it to the implemented deck-specific message.
 - 2026-11-27: Completed #2 implementation: shared 100-character name validation, optional custom creation, sequential generation beyond existing numeric names, account-scoped rename, database-backed case-insensitive uniqueness errors, form UI, ownership/CSRF handling, tests, and documentation. Focused tests passed (29); the complete suite passed (72) with one existing Starlette/httpx deprecation warning. Python compilation, JavaScript syntax validation, and `git diff --check` also passed. Next: implement transactional empty-deck deletion for #3.
 - 2026-11-27: Completed the user-requested responsive visual refresh. Added a cohesive color/type/spacing system, sticky translucent header, compact brand treatment, responsive navigation, polished panels/forms/cards/Review/admin states, touch-sized mobile controls, table overflow handling, skip navigation, and reduced-motion support. Verified served login/CSS assets through the live preview, including responsive breakpoints. The complete suite passed (72) with the existing deprecation warning; Python compilation, JavaScript syntax validation, and `git diff --check` passed.
+- 2026-11-27: Completed #3's available implementation. Added a CSRF-protected confirmed delete action, disabled-state guidance, and a single conditional SQL delete that atomically requires ownership, no cards, and more than one owned deck. Stale-page, non-empty, last-deck, foreign-ID, missing-CSRF, first-listed deletion, and successful deletion paths are covered. Updated README, architecture, and TD-014. Focused tests passed (26); the complete suite passed (74) with the existing deprecation warning. Public-link cleanup remains explicitly deferred to #4, whose share-table foreign key must cascade on deck deletion.
