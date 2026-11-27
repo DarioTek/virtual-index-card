@@ -21,6 +21,7 @@ Deliver the full [multiple-deck epic #1](https://github.com/DarioTek/virtual-ind
 |---|---|---|---|---|
 | 1 | Re-establish a test-capable environment and verify the existing multi-deck baseline | #1 | dependency environment, complete test suite | Completed |
 | 2 | Add validated custom deck creation and account-scoped rename, including concurrency-safe uniqueness | #2 | `domain.py`, `repository.py`, `app.py`, deck template, tests | Completed |
+| UI | Modernize the shared responsive layout, navigation, forms, cards, review view, and admin tables for desktop and mobile | User request | templates, `static/styles.css`, responsive regression checks | Completed |
 | 3 | Add transactional empty-deck deletion with last-deck protection and confirmation UI | #3 | `repository.py`, `app.py`, deck template, tests | Not Started |
 | 4 | Design and migrate storage for hashed public-share tokens; add owner controls and anonymous read-only Review | #4 | `db.py`, `security.py`, `repository.py`, `app.py`, templates, tests | Not Started |
 | 5 | Define the versioned JSON format and configurable limits; add transactional export/import | #5 | `config.py`, `domain.py`, `repository.py`, `app.py`, templates, tests, docs | Not Started |
@@ -43,6 +44,13 @@ Each child issue will be implemented as a focused logical unit in dependency ord
 - [x] Valid custom names can be supplied during creation and existing owned decks can be renamed.
 - [x] Names are trimmed, 1–100 characters, and unique per account case-insensitively; the database constraint is authoritative for conflicting writes.
 - [x] Rename preserves cards, timestamps, and Review order; foreign deck IDs fail safely.
+
+### Responsive visual refresh
+
+- [x] Shared header, navigation, page spacing, typography, buttons, and forms use a cohesive professional design system.
+- [x] Deck management, card grids, Review, authentication, and administration layouts adapt at desktop, tablet, and phone breakpoints without requiring application JavaScript.
+- [x] Mobile controls remain touch-friendly; navigation and wide admin tables remain reachable without page-level horizontal overflow.
+- [x] Keyboard focus, skip navigation, reduced-motion behavior, contrast-aware status treatments, and existing semantic labels are preserved or improved.
 
 ### #3 — empty-deck deletion
 
@@ -100,3 +108,4 @@ Each child issue will be implemented as a focused logical unit in dependency ord
 - 2026-11-27: User authorized starting #1. Re-read the live epic and child issues, confirmed a clean branch, replaced the obsolete plan with this dependency-ordered delivery plan, and began restoring baseline test validation.
 - 2026-11-27: System Python correctly rejected a user-level `pip install uv` under PEP 668. Installed `uv` in an isolated `/tmp` bootstrap environment, synchronized the committed development environment, and ran the baseline suite. The first run found one stale empty-Review copy assertion (67 passed, 1 failed); updated it to the implemented deck-specific message.
 - 2026-11-27: Completed #2 implementation: shared 100-character name validation, optional custom creation, sequential generation beyond existing numeric names, account-scoped rename, database-backed case-insensitive uniqueness errors, form UI, ownership/CSRF handling, tests, and documentation. Focused tests passed (29); the complete suite passed (72) with one existing Starlette/httpx deprecation warning. Python compilation, JavaScript syntax validation, and `git diff --check` also passed. Next: implement transactional empty-deck deletion for #3.
+- 2026-11-27: Completed the user-requested responsive visual refresh. Added a cohesive color/type/spacing system, sticky translucent header, compact brand treatment, responsive navigation, polished panels/forms/cards/Review/admin states, touch-sized mobile controls, table overflow handling, skip navigation, and reduced-motion support. Verified served login/CSS assets through the live preview, including responsive breakpoints. The complete suite passed (72) with the existing deprecation warning; Python compilation, JavaScript syntax validation, and `git diff --check` passed.
