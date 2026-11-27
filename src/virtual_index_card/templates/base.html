@@ -15,7 +15,7 @@
       <nav class="main-nav" aria-label="Main navigation">
         <a href="/">Deck</a>
         <a href="/review">Review</a>
-        {% if user['role'] == 'admin' %}<a href="/admin/requests">Admin</a>{% endif %}
+        {% if user['role'] == 'admin' %}<a href="/admin/requests">Requests</a><a href="/admin/users">Users</a>{% endif %}
       </nav>
       <div class="account">
         <span class="username">{{ user['username'] }}</span>

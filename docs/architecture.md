@@ -58,6 +58,8 @@ Indexes cover session expiry, `(user_id, position)`, and request status. Foreign
 | `GET`/`POST` | `/register` | Account-request form / file a pending request | None |
 | `GET` | `/register/received` | Confirmation after submitting a request | None |
 | `GET` | `/admin/requests` | Request queue: pending list + recent decisions | Admin |
+| `GET` | `/admin/users` | All accounts with role, card count, created date | Admin |
+| `POST` | `/admin/users/{id}/delete` | Delete a non-admin account (cards/sessions cascade) | Admin + CSRF form token |
 | `POST` | `/admin/requests/{id}/approve` | Create account from a pending request; credentials shown once | Admin + CSRF form token |
 | `POST` | `/admin/requests/{id}/reject` | Reject a pending request | Admin + CSRF form token |
 | `POST` | `/admin/users/{id}/reset-password` | Generate a new temporary password and sign the user out | Admin + CSRF form token |
@@ -96,7 +98,7 @@ HTTPS/reverse proxy, production secrets management, and scheduled backups are **
 
 ## Testing
 
-`uv run pytest -q` runs 47 tests: domain/shuffle and username/password invariants, password/token helpers, repository isolation, migration of a synthetic v1 database to v2, and FastAPI integration coverage for the request → approval → login flow, role gating, CSRF, rejection, one-time credential display, password reset semantics, CRUD, newest-first management, persisted Review shuffle, and account separation. A live `uvicorn` smoke test with `curl` verified the same end-to-end flow.
+`uv run pytest -q` runs 55 tests: domain/shuffle and username/password invariants, password/token helpers, repository isolation, migration of a synthetic v1 database to v2, and FastAPI integration coverage for the request → approval → login flow, role gating, CSRF, rejection, one-time credential display, password reset semantics, CRUD, newest-first management, persisted Review shuffle, and account separation. A live `uvicorn` smoke test with `curl` verified the same end-to-end flow.
 
 ## Known limitations
 

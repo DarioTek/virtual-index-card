@@ -79,6 +79,24 @@ def count_admins(connection: sqlite3.Connection) -> int:
     return int(row["n"])
 
 
+def list_users(connection: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return every account with its card count, newest first."""
+    return connection.execute(
+        """
+        SELECT u.id, u.username, u.role, u.created_at,
+               (SELECT COUNT(*) FROM cards c WHERE c.user_id = u.id) AS card_count
+        FROM users u
+        ORDER BY u.created_at DESC, u.id DESC
+        """
+    ).fetchall()
+
+
+def delete_user(connection: sqlite3.Connection, user_id: int) -> bool:
+    """Delete an account; cards and sessions cascade via foreign keys."""
+    cursor = connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return cursor.rowcount > 0
+
+
 def get_user_by_username(connection: sqlite3.Connection, username: str) -> sqlite3.Row | None:
     return connection.execute(
         "SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)

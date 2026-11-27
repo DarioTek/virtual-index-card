@@ -4,7 +4,7 @@
 <section class="admin-header">
   <div>
     <h1>Account requests</h1>
-    <p class="card-count">{{ pending|length }} pending · {{ decided|length }} recent decisions</p>
+    <p class="card-count">{{ pending|length }} pending · {{ decided|length }} recent decisions · <a href="/admin/users">Users</a></p>
   </div>
 </section>
 {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}

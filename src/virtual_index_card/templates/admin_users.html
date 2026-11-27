@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Users · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="admin-header">
+  <div>
+    <h1>Users</h1>
+    <p class="card-count">{{ users|length }} account{% if users|length != 1 %}s{% endif %} · <a href="/admin/requests">Account requests</a></p>
+  </div>
+</section>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="admin-panel" aria-labelledby="users-heading">
+  <h2 id="users-heading">All accounts</h2>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th scope="col">Username</th>
+        <th scope="col">Role</th>
+        <th scope="col">Cards</th>
+        <th scope="col">Created</th>
+        <th scope="col"><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for account in users %}
+      <tr data-user-id="{{ account['id'] }}">
+        <td>{{ account['username'] }}{% if account['id'] == user['id'] %} <span class="optional">(you)</span>{% endif %}</td>
+        <td><span class="badge badge-{{ account['role'] }}">{{ account['role'] }}</span></td>
+        <td>{{ account['card_count'] }}</td>
+        <td>{{ account['created_at'][:10] }}</td>
+        <td class="user-actions">
+          {% if account['role'] == 'admin' %}
+          <span class="optional">Protected</span>
+          {% else %}
+          <form method="post" action="/admin/users/{{ account['id'] }}/reset-password" class="reset-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary small">Reset password</button>
+          </form>
+          <form method="post" action="/admin/users/{{ account['id'] }}/delete" class="delete-form"
+                onsubmit="return confirm('Delete account {{ account['username'] }}? This permanently removes their deck ({{ account['card_count'] }} card{% if account['card_count'] != 1 %}s{% endif %}) and cannot be undone.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="danger small">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

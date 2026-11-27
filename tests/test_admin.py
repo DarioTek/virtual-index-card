@@ -1,12 +1,17 @@
 import re
 import sqlite3
+from contextlib import closing
 
 import pytest
 from fastapi.testclient import TestClient
 
+from virtual_index_card import repository as repo
 from virtual_index_card.app import create_app
 from virtual_index_card.config import Settings
-from tests.conftest import admin_client, pending_request_id, register
+from virtual_index_card.db import connect
+from virtual_index_card.domain import utc_now
+from virtual_index_card.security import hash_password
+from tests.conftest import admin_client, csrf_headers, pending_request_id, register
 
 V1_SCHEMA = """
 CREATE TABLE users (
@@ -501,3 +506,215 @@ def test_unsupported_schema_version_is_rejected(tmp_path) -> None:
         connection.close()
     with pytest.raises(RuntimeError, match="Unsupported database schema version"):
         create_app(Settings(database_path=database))
+
+
+# --- Administrator: user management (/admin/users) --------------------------
+
+
+def _create_user_directly(
+    settings: Settings, username: str, password: str, role: str = "user"
+) -> int:
+    with closing(connect(settings.database_path)) as connection:
+        with connection:
+            salt, digest = hash_password(password)
+            return repo.create_user(connection, username, salt, digest, utc_now(), role=role)
+
+
+def test_admin_users_page_lists_accounts(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    client.post(
+        "/api/cards",
+        json={"front": "f", "back": "b"},
+        headers=csrf_headers(client),
+    )
+
+    admin = admin_client(settings)
+    page = admin.get("/admin/users")
+    assert page.status_code == 200
+    assert "alice" in page.text
+    assert "admin" in page.text
+    assert "<td>1</td>" in page.text
+    assert 'href="/admin/users"' in admin.get("/").text
+
+
+def test_admin_users_page_requires_administrator(client: TestClient) -> None:
+    anonymous = client.get("/admin/users", follow_redirects=False)
+    assert anonymous.status_code == 303
+    assert anonymous.headers["location"] == "/login"
+
+    register(client, "alice")
+    forbidden = client.get("/admin/users")
+    assert forbidden.status_code == 403
+    assert 'href="/admin/users"' not in client.get("/").text
+
+
+def test_admin_users_page_marks_admins_protected(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    admin = admin_client(settings)
+    page = admin.get("/admin/users")
+    assert "Protected" in page.text
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        alice_id = connection.execute(
+            "SELECT id FROM users WHERE username = 'alice'"
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    assert f'action="/admin/users/{alice_id}/delete"' in page.text
+
+
+def test_delete_user_removes_account_cards_and_sessions(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    client.post(
+        "/api/cards",
+        json={"front": "secret", "back": "gone"},
+        headers=csrf_headers(client),
+    )
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        alice_id = connection.execute(
+            "SELECT id FROM users WHERE username = 'alice'"
+        ).fetchone()[0]
+        assert connection.execute(
+            "SELECT COUNT(*) FROM cards WHERE user_id = ?", (alice_id,)
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+
+    admin = admin_client(settings)
+    deletion = admin.post(
+        f"/admin/users/{alice_id}/delete",
+        data={"csrf_token": admin.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert deletion.status_code == 303
+
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?", (alice_id,)
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM cards WHERE user_id = ?", (alice_id,)
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sessions WHERE user_id = ?", (alice_id,)
+        ).fetchone()[0] == 0
+        audit = connection.execute(
+            "SELECT status, created_user_id, decided_by FROM account_requests"
+        ).fetchone()
+    finally:
+        connection.close()
+    # The approval audit trail survives with user references nulled out.
+    assert audit[0] == "approved"
+    assert audit[1] is None
+
+    login = client.post(
+        "/login",
+        data={"username": "alice", "password": "correct horse battery"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 401
+
+
+def test_delete_user_rejects_administrator_accounts(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    admin = admin_client(settings)
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        admin_id = connection.execute(
+            "SELECT id FROM users WHERE role = 'admin'"
+        ).fetchone()[0]
+    finally:
+        connection.close()
+
+    refused = admin.post(
+        f"/admin/users/{admin_id}/delete",
+        data={"csrf_token": admin.cookies.get("vic_csrf")},
+    )
+    assert refused.status_code == 400
+    assert "Administrator accounts cannot be deleted" in refused.text
+
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM users WHERE id = ?", (admin_id,)
+        ).fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
+def test_delete_user_requires_csrf_and_existing_user(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    admin = admin_client(settings)
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        alice_id = connection.execute(
+            "SELECT id FROM users WHERE username = 'alice'"
+        ).fetchone()[0]
+    finally:
+        connection.close()
+
+    no_csrf = admin.post(f"/admin/users/{alice_id}/delete")
+    assert no_csrf.status_code == 403
+
+    missing = admin.post(
+        "/admin/users/999999/delete",
+        data={"csrf_token": admin.cookies.get("vic_csrf")},
+    )
+    assert missing.status_code == 404
+
+
+def test_delete_user_is_admin_only(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    admin = admin_client(settings)
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        admin_id = connection.execute(
+            "SELECT id FROM users WHERE role = 'admin'"
+        ).fetchone()[0]
+    finally:
+        connection.close()
+
+    forbidden = client.post(
+        f"/admin/users/{admin_id}/delete",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+    )
+    assert forbidden.status_code == 403
+
+
+def test_reset_password_works_for_user_not_created_by_approval(
+    client: TestClient, settings: Settings
+) -> None:
+    uid = _create_user_directly(settings, "legacyuser", "legacy-password-9")
+    admin = admin_client(settings)
+    reset = admin.post(
+        f"/admin/users/{uid}/reset-password",
+        data={"csrf_token": admin.cookies.get("vic_csrf")},
+    )
+    assert reset.status_code == 200
+    match = re.search(r'id="credential-password">([^<]+)<', reset.text)
+    assert match is not None
+
+    old_login = client.post(
+        "/login",
+        data={"username": "legacyuser", "password": "legacy-password-9"},
+        follow_redirects=False,
+    )
+    assert old_login.status_code == 401
+    new_login = client.post(
+        "/login",
+        data={"username": "legacyuser", "password": match.group(1)},
+        follow_redirects=False,
+    )
+    assert new_login.status_code == 303

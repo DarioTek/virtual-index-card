@@ -166,6 +166,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=status_code,
         )
 
+    def render_admin_users(
+        request: Request,
+        user: object,
+        connection: Connection,
+        error: str | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "admin_users.html",
+            {
+                "user": user,
+                "users": repo.list_users(connection),
+                "error": error,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+            status_code=status_code,
+        )
+
     def render_credentials(
         request: Request,
         user: object,
@@ -415,6 +434,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "this account were signed out. Hand the new password to the user; it is "
             "shown only on this page and is never stored in plain text.",
         )
+
+    # --- Administrator: user management ----------------------------------------
+
+    @app.get("/admin/users", response_class=HTMLResponse, tags=["admin"])
+    def admin_users_page(
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+    ) -> Response:
+        user = current_user(request, connection)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required.")
+        return render_admin_users(request, user, connection)
+
+    @app.post("/admin/users/{user_id}/delete", tags=["admin"])
+    def delete_user(
+        user_id: int,
+        request: Request,
+        admin: Annotated[object, Depends(require_admin)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str, Form()] = "",
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        target = repo.get_user_by_id(connection, user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Account not found.")
+        if target["role"] == "admin":
+            return render_admin_users(
+                request,
+                admin,
+                connection,
+                error="Administrator accounts cannot be deleted here. "
+                "Remove the admin role via the create_admin command instead.",
+                status_code=400,
+            )
+        with connection:
+            repo.delete_user(connection, user_id)
+        return RedirectResponse("/admin/users", status_code=303)
 
     # --- Deck page ----------------------------------------------------------
 

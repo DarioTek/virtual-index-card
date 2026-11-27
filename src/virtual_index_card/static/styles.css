@@ -326,3 +326,8 @@ textarea, input {
   user-select: all;
 }
 .credentials-warning { color: var(--danger); font-weight: 600; }
+
+.badge-admin { color: #5b3a8e; border-color: #8a5fc0; background: #f1eaf9; }
+.badge-user { color: var(--muted); border-color: var(--line); background: #f3f1ea; }
+.reset-form, .delete-form { display: inline-block; margin: 0 0 0 0.35rem; }
+.user-actions { white-space: nowrap; }
