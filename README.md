@@ -14,7 +14,7 @@ All durable data â€” accounts, sessions, decks, cards, and per-deck card order â
 - Multiple private decks per account with sequential defaults or unique custom names; owners can rename decks and permanently delete empty non-last decks, while users cannot see or modify another account's decks or cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
-- Read-only public links: `GET /s/{token}` renders one deck for anonymous visitors with no mutation routes, `no-store` caching, and `noindex` headers.
+- Read-only public links: `GET /s/{token}` renders one deck for anonymous visitors with no mutation routes, `no-store` caching, `noindex`, and `no-referrer` headers.
 - Rich-text card formatting on both front and back with keyboard-accessible toolbar controls for **bold**, **italic**, **underline**, and a fixed WCAG AA 4-color palette (`black`, `green`, `red`, `blue`), supporting overlapping styles, a 5,000 visible Unicode code-point limit per side, safe server-side canonicalization/escaping, and verbatim preservation of plain-text cards.
 - **Public read-only deck links**: an owner can create, rotate, and revoke an unlisted link that shows one deck to visitors without an account. The token is stored only as a SHA-256 hash and displayed once.
 - **Versioned JSON export** of a single owned deck (`/decks/{id}/export.json`) that preserves formatting and Review order.

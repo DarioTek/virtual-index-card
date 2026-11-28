@@ -38,7 +38,6 @@ from .security import (
     tokens_match,
     verify_password,
 )
-from .formatting import serialize_rich_document
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 SESSION_COOKIE = "vic_session"
@@ -623,7 +622,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "share": repo.get_active_deck_share(
                     connection, int(user["id"]), int(deck["id"])
                 ),
-                "share_token": request.query_params.get("share_token"),
                 "share_notice": request.query_params.get("share_notice"),
                 "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
             },
@@ -891,6 +889,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        # The token is in the URL path: never leak it to other origins.
+        response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
     @app.get("/s/{token}", response_class=HTMLResponse, tags=["sharing"])

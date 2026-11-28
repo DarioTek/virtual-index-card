@@ -781,6 +781,9 @@ def test_share_link_is_read_only_and_anonymous(client: TestClient, settings: Set
     assert view.status_code == 200
     assert view.headers["cache-control"] == "no-store"
     assert view.headers["x-robots-tag"] == "noindex, nofollow"
+    assert view.headers["referrer-policy"] == "no-referrer"
+    # The shared view must not hand a session or CSRF cookie to an anonymous visitor.
+    assert not any(name.startswith("vic_") for name in view.cookies)
     assert "Q1" in view.text and "A1" in view.text
     assert 'name="robots"' in view.text
     # Only the shared deck's cards, and none of the owner's private surface.
@@ -789,10 +792,13 @@ def test_share_link_is_read_only_and_anonymous(client: TestClient, settings: Set
     assert "admin/requests" not in view.text
     assert "csrf-token" not in view.text
 
-    # Review-order navigation works without authentication.
+    # Review-order navigation works without authentication and advances the card.
     next_link = re.search(r'href="(/s/[^"]+index=\d+)"[^>]*rel="next"', view.text)
     assert next_link is not None
-    assert anonymous.get(next_link.group(1)).status_code == 200
+    second = anonymous.get(next_link.group(1))
+    assert second.status_code == 200
+    assert "Q2" in second.text
+    assert "Q1" not in second.text
 
     # Every mutation path is rejected for an anonymous viewer.
     assert anonymous.post("/api/cards", json={"front": "x", "back": "y"}).status_code == 401
@@ -804,6 +810,19 @@ def test_share_link_is_read_only_and_anonymous(client: TestClient, settings: Set
     landing = anonymous.get("/", follow_redirects=False)
     assert landing.status_code == 303
     assert landing.headers["location"] == "/login"
+
+
+def test_share_created_page_is_not_cacheable(client: TestClient) -> None:
+    """The response that carries the only copy of the token must never be cached."""
+    register(client, "alice")
+    response = client.post(
+        f"/decks/{_deck_id(client)}/share",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "shown only on this page" in response.text
 
 
 def test_share_requires_owner_and_csrf(client: TestClient, settings: Settings) -> None:
