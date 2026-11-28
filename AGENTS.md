@@ -26,15 +26,17 @@ Use the following structure as the default for a new project. Adapt it to the pr
 ```text
 my-project/
 ├── AGENTS.md
+├── AGENT_PROMPTS.md        (optional, reusable session prompts)
 ├── PLAN.md
 ├── PROJECT_GUIDELINES.md   (optional, project-specific coding standards)
 ├── README.md
 ├── docs/
 │   ├── architecture.md
-│   └── technical-decisions.md
+│   ├── technical-decisions.md
+│   └── ... (operations, deployment runbooks, API notes)
 ├── src/
 ├── tests/
-└── ... (configuration, scripts, deployment, and other project-specific files)
+└── ... (configuration, CI workflows, start/stop scripts, deployment files)
 ```
 
 ### Directory and file responsibilities
@@ -44,6 +46,7 @@ my-project/
 | `AGENTS.md` | Persistent operating instructions for AI agents |
 | `PLAN.md` | Current assignment, task sequence, and execution progress |
 | `PROJECT_GUIDELINES.md` | Optional project-specific coding, testing, logging, and quality standards |
+| `AGENT_PROMPTS.md` | Optional copy-and-paste prompts for starting, resuming, and grooming work |
 | `README.md` | Project overview, setup, usage, and developer instructions |
 | `docs/architecture.md` | Current system architecture and important structural diagrams |
 | `docs/technical-decisions.md` | Architecture and implementation decisions with rationale |
@@ -77,7 +80,7 @@ Maintain these files in the repository root:
 - Do not mark work complete until its acceptance criteria have been verified.
 
 ### Backlog — GitHub Issues
-- GitHub Issues is the single source of truth for the backlog. Do not create or maintain a `BACKLOG.md` or a backlog archive file in the repository.
+- GitHub Issues is the single source of truth for the backlog. Do not create or maintain a `BACKLOG.md` or a backlog archive file in the repository. If one already exists, migrate anything still relevant to issues and delete the file; completed history lives in closed issues.
 - Capture future features, bugs, technical debt, performance/security improvements, infrastructure work, documentation, and useful ideas as issues.
 - Each issue should include a description, acceptance criteria, and dependencies or context where useful. Use labels for category and priority, and milestones or project boards for status and grouping, following the repository's existing conventions.
 - Search open and closed issues for duplicates before creating one.
@@ -200,6 +203,8 @@ If the approach must change, update `PLAN.md` with the reason, impact, revised t
 Choose validation appropriate to the change. This may include unit, integration, regression, API, end-to-end, security, lint, formatting, type-check, or build checks.
 
 - Run tests that are relevant and available.
+- For this repository, the standard validation set is `uv run pytest -q`, `uv run python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check`. Add task-specific checks (for example a live `uvicorn` smoke test) as needed.
+- When a change touches documentation, re-run every command the edited document tells a reader to run, or mark it unverified.
 - Report commands and actual outcomes.
 - Distinguish tests passed, failed, skipped, and not run.
 - Do not hide failures or weaken tests merely to obtain a passing result.

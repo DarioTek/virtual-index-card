@@ -34,12 +34,12 @@ Browser -- HTTPS :443 --> Nginx -- HTTP loopback :10001 --> Gunicorn/ASGI --> SQ
 
 ## 2. Clone and install the production dependencies
 
-The application currently lives on the `arena/bd203bc7-virtual-index-card` branch; **clone that branch** until it is merged. Run these commands as the non-root deployment account, not as the service account:
+The application is on the `main` branch. Run these commands as the non-root deployment account, not as the service account:
 
 ```bash
 sudo mkdir -p /mnt/ssd/git
 sudo chown "$USER:$(id -gn)" /mnt/ssd/git   # only if this directory is yours to administer
-git clone --branch arena/bd203bc7-virtual-index-card --single-branch \
+git clone --branch main --single-branch \
   https://github.com/DarioTek/virtual-index-card.git \
   /mnt/ssd/git/virtual-index-card
 cd /mnt/ssd/git/virtual-index-card
@@ -179,7 +179,7 @@ curl -i https://cards.example.com/health   # HTTP 200, {"status":"ok"}
 curl -sS -D - -o /dev/null https://cards.example.com/login  # GET: HTTP 200 and security headers
 ```
 
-Then test the account-request flow, login, card CRUD and Review over **HTTPS** in a browser: visitors can only file an account request — accounts are created when the administrator approves them at **Admin → Account requests**, and the system issues a shown-once account name/temporary password. Bootstrap the first administrator before exposing the service: either set `VIC_ADMIN_USERNAME`/`VIC_ADMIN_PASSWORD` in the environment file for one deploy (then remove them; the password reapplies on every start otherwise), or run `sudo -u vic .venv/bin/python -m virtual_index_card.create_admin admin` on the Pi and note the generated password. There is no email verification or login rate limiting yet; mail-based delivery of credentials remains `BL-024`. Assess this exposure and complete the threat/privacy review (`BL-013`) before publishing personal notes. If the proxy gives 502, check `journalctl -u virtual-index-card` and Nginx error logs. If Certbot fails, check public DNS resolution, port forwarding, firewall, IPv6 AAAA (if present), and `sudo nginx -t`.
+Then test the account-request flow, login, card CRUD and Review over **HTTPS** in a browser: visitors can only file an account request — accounts are created when the administrator approves them at **Admin → Requests** (page title *Account requests*), and the system issues a shown-once account name/temporary password. Bootstrap the first administrator before exposing the service: either set `VIC_ADMIN_USERNAME`/`VIC_ADMIN_PASSWORD` in the environment file for one deploy (then remove them; the password reapplies on every start otherwise), or run `sudo -u vic .venv/bin/python -m virtual_index_card.create_admin admin` on the Pi and note the generated password. There is no email verification or login rate limiting yet; mail-based delivery of credentials is still open backlog work. Assess this exposure and complete a threat/privacy review before publishing personal notes. If the proxy gives 502, check `journalctl -u virtual-index-card` and Nginx error logs. If Certbot fails, check public DNS resolution, port forwarding, firewall, IPv6 AAAA (if present), and `sudo nginx -t`.
 
 ## 6. Backups and restore (required before public exposure)
 
@@ -195,7 +195,7 @@ sudo -u vic sqlite3 "$DB" ".backup '$BACKUP'"
 sudo -u vic sqlite3 "$BACKUP" 'PRAGMA integrity_check;'  # must print ok
 ```
 
-Automate this with a monitored daily systemd timer or cron job that **fails if `/mnt/backup` is not mounted**, runs `.backup` as `vic`, verifies `integrity_check`, and logs/alerts on failure. Retain multiple generations and copy them off-site; verify the schedule, retention, and alerts on the actual Pi. This guide does **not** create or validate a backup timer for you (`BL-023` remains open).
+Automate this with a monitored daily systemd timer or cron job that **fails if `/mnt/backup` is not mounted**, runs `.backup` as `vic`, verifies `integrity_check`, and logs/alerts on failure. Retain multiple generations and copy them off-site; verify the schedule, retention, and alerts on the actual Pi. This guide does **not** create or validate a backup timer for you (scheduled off-device backups remain open backlog work).
 
 To practice restoring, use a **separate test copy/location** first. For a real restore, stop the service and back up the current DB before replacing it; do not overwrite a running SQLite database:
 
@@ -222,13 +222,13 @@ If the original DB has WAL/journal sidecars, keep them together with the origina
 
 ## 7. Updates and diagnostics
 
-With the deployment account, take a verified backup first. Stop the service so it cannot import half-updated code; then update the **same branch** and locked dependencies:
+With the deployment account, take a verified backup first. Stop the service so it cannot import half-updated code; then pull the latest `main` and locked dependencies:
 
 ```bash
 sudo systemctl stop virtual-index-card
 cd /mnt/ssd/git/virtual-index-card
 git status --short
-git pull --ff-only origin arena/bd203bc7-virtual-index-card
+git pull --ff-only origin main
 uv sync --no-dev --locked --python /usr/bin/python3
 sudo systemctl start virtual-index-card
 sudo systemctl status virtual-index-card --no-pager
@@ -237,4 +237,4 @@ curl -fsS http://127.0.0.1:10001/health
 
 If `git status --short` is nonempty, investigate before pulling; don't reset local changes or overwrite the DB. Check `sudo journalctl -u virtual-index-card -f`, `sudo tail -f /var/log/nginx/error.log`, and `sudo certbot certificates` when troubleshooting. Keep Pi OS packages, uv, Python and the app dependencies patched. If the code changes the SQLite schema in a future release, arrange a migration and backup before updating.
 
-**Unverified here:** real Raspberry Pi installation, public DNS/port forwarding, certificate issuance/renewal, hardened reverse proxy, automatic off-device backups, and a restore drill. The corresponding backlog items `BL-016`, `BL-022`, and `BL-023` remain open until validated on the deployment target.
+**Unverified here:** real Raspberry Pi installation, public DNS/port forwarding, certificate issuance/renewal, hardened reverse proxy, automatic off-device backups, and a restore drill. The corresponding backlog items (Pi installation validation, HTTPS/reverse-proxy validation, and off-device backup automation with a restore drill) remain open until validated on the deployment target.

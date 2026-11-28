@@ -21,11 +21,12 @@ mkdir -p "$PROJECT_DIR/logs"
 echo "Starting Virtual Index Card app with Gunicorn..."
 export VIC_DATABASE_PATH="./data/virtual-index-card.sqlite3"
 
-# Note: Ensure 'gunicorn' is added to your project dependencies (pyproject.toml)
+# Bind to loopback only; Nginx (or another proxy) is the public entry point.
+# See docs/raspberry-pi-deployment.md and docs/operations.md.
 nohup uv run gunicorn virtual_index_card.app:app \
   --workers 2 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:10001 \
+  --worker-class uvicorn_worker.UvicornWorker \
+  --bind 127.0.0.1:10001 \
   --pid "$PROJECT_DIR/gunicorn.pid" \
   > "$PROJECT_DIR/logs/virtual_index_card.log" 2>&1 &
 

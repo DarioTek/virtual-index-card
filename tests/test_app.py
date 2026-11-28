@@ -708,3 +708,304 @@ def test_formatting_validation_boundaries_and_xss_defense(
         },
         headers=csrf_headers(other),
     ).status_code == 404
+
+
+def test_api_docs_routes_are_hidden_by_default(
+    client: TestClient, settings: Settings
+) -> None:
+    assert settings.enable_docs is False
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_api_docs_routes_can_be_enabled(settings: Settings) -> None:
+    enabled = Settings(
+        database_path=settings.database_path,
+        cookie_secure=False,
+        enable_docs=True,
+    )
+    with TestClient(create_app(enabled)) as docs_client:
+        assert docs_client.get("/docs").status_code == 200
+        assert docs_client.get("/redoc").status_code == 200
+        schema = docs_client.get("/openapi.json")
+        assert schema.status_code == 200
+        assert schema.json()["info"]["title"] == "Virtual Index Cards"
+
+
+def test_openapi_version_matches_package_version(settings: Settings) -> None:
+    from virtual_index_card import __version__
+
+    enabled = Settings(
+        database_path=settings.database_path,
+        cookie_secure=False,
+        enable_docs=True,
+    )
+    with TestClient(create_app(enabled)) as docs_client:
+        assert docs_client.get("/openapi.json").json()["info"]["version"] == __version__
+
+
+# --- Public read-only deck sharing (#4) -------------------------------------
+
+
+def _create_share(client: TestClient, deck_id: str) -> str:
+    """Create or rotate a share link and return its public path."""
+    response = client.post(
+        f"/decks/{deck_id}/share",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200, response.text
+    match = re.search(r'id="share-url" class="share-url" value="([^"]+)"', response.text)
+    assert match is not None, response.text
+    return "/" + match.group(1).split("/", 3)[3]
+
+
+def _deck_id(client: TestClient) -> str:
+    page = client.get("/")
+    match = re.search(r'data-deck-id="(\d+)"', page.text)
+    assert match is not None
+    return match.group(1)
+
+
+def test_share_link_is_read_only_and_anonymous(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    headers = csrf_headers(client)
+    client.post("/api/cards", json={"front": "Q1", "back": "A1"}, headers=headers)
+    client.post("/api/cards", json={"front": "Q2", "back": "A2"}, headers=headers)
+    deck_id = _deck_id(client)
+    share_path = _create_share(client, deck_id)
+
+    anonymous = TestClient(create_app(settings))
+    view = anonymous.get(share_path)
+    assert view.status_code == 200
+    assert view.headers["cache-control"] == "no-store"
+    assert view.headers["x-robots-tag"] == "noindex, nofollow"
+    assert "Q1" in view.text and "A1" in view.text
+    assert 'name="robots"' in view.text
+    # Only the shared deck's cards, and none of the owner's private surface.
+    assert "Q2" not in view.text
+    assert "alice" not in view.text
+    assert "admin/requests" not in view.text
+    assert "csrf-token" not in view.text
+
+    # Review-order navigation works without authentication.
+    next_link = re.search(r'href="(/s/[^"]+index=\d+)"[^>]*rel="next"', view.text)
+    assert next_link is not None
+    assert anonymous.get(next_link.group(1)).status_code == 200
+
+    # Every mutation path is rejected for an anonymous viewer.
+    assert anonymous.post("/api/cards", json={"front": "x", "back": "y"}).status_code == 401
+    assert anonymous.post("/api/deck/shuffle").status_code == 401
+    assert anonymous.patch("/api/cards/1", json={"front": "x", "back": "y"}).status_code == 401
+    assert anonymous.delete("/api/cards/1").status_code == 401
+    assert anonymous.post(f"/decks/{deck_id}/share").status_code == 401
+    assert anonymous.post(f"/decks/{deck_id}/share/revoke").status_code == 401
+    landing = anonymous.get("/", follow_redirects=False)
+    assert landing.status_code == 303
+    assert landing.headers["location"] == "/login"
+
+
+def test_share_requires_owner_and_csrf(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    client.post("/api/cards", json={"front": "Q", "back": "A"}, headers=csrf_headers(client))
+    deck_id = _deck_id(client)
+
+    no_csrf = client.post(f"/decks/{deck_id}/share", data={}, follow_redirects=False)
+    assert no_csrf.status_code == 403
+
+    other = TestClient(create_app(settings))
+    register(other, "bob")
+    foreign = other.post(
+        f"/decks/{deck_id}/share",
+        data={"csrf_token": other.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert foreign.status_code == 404
+    # Bob's own deck is unaffected by Alice's link.
+    assert "alice" not in other.get("/").text
+
+
+def test_share_rotation_and_revocation(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    deck_id = _deck_id(client)
+    first = _create_share(client, deck_id)
+    anonymous = TestClient(create_app(settings))
+    assert anonymous.get(first).status_code == 200
+
+    rotated = client.post(
+        f"/decks/{deck_id}/share/rotate",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert rotated.status_code == 200
+    assert "rotated" in rotated.text.lower()
+    new_path = "/" + re.search(
+        r'id="share-url" class="share-url" value="([^"]+)"', rotated.text
+    ).group(1).split("/", 3)[3]
+    assert new_path != first
+    assert anonymous.get(first).status_code == 404
+    assert anonymous.get(new_path).status_code == 200
+
+    revoked = client.post(
+        f"/decks/{deck_id}/share/revoke",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=True,
+    )
+    assert revoked.status_code == 200
+    assert "revoked" in revoked.text
+    assert "Create public link" in revoked.text
+    assert anonymous.get(new_path).status_code == 404
+
+
+def test_unknown_and_malformed_tokens_are_indistinguishable(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    anonymous = TestClient(create_app(settings))
+    unknown = anonymous.get("/s/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    malformed = anonymous.get("/s/not-a-token")
+    assert unknown.status_code == malformed.status_code == 404
+    assert unknown.text == malformed.text
+    assert "alice" not in unknown.text
+
+
+def test_share_tokens_are_stored_hashed_only(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    deck_id = _deck_id(client)
+    share_path = _create_share(client, deck_id)
+    token = share_path.rsplit("/", 1)[1]
+    from contextlib import closing
+
+    from virtual_index_card.db import connect
+
+    with closing(connect(settings.database_path)) as connection:
+        row = connection.execute("SELECT token_hash FROM deck_shares").fetchone()
+    assert row is not None
+    assert row["token_hash"] != token
+    assert len(row["token_hash"]) == 64
+    with closing(connect(settings.database_path)) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM deck_shares WHERE token_hash = ?", (token,)
+        ).fetchone()["n"] == 0
+
+
+def test_deleting_a_deck_revokes_its_share(client: TestClient, settings: Settings) -> None:
+    register(client, "alice")
+    deck_id = _deck_id(client)
+    # A second deck so the first is deletable while empty.
+    client.post(
+        "/decks",
+        data={"csrf_token": client.cookies.get("vic_csrf"), "current_deck_id": deck_id},
+        follow_redirects=False,
+    )
+    share_path = _create_share(client, deck_id)
+    anonymous = TestClient(create_app(settings))
+    assert anonymous.get(share_path).status_code == 200
+
+    deleted = client.post(
+        f"/decks/{deck_id}/delete",
+        data={"csrf_token": client.cookies.get("vic_csrf")},
+        follow_redirects=False,
+    )
+    assert deleted.status_code == 303
+    assert anonymous.get(share_path).status_code == 404
+    from contextlib import closing
+
+    from virtual_index_card.db import connect
+
+    with closing(connect(settings.database_path)) as connection:
+        assert connection.execute("SELECT COUNT(*) AS n FROM deck_shares").fetchone()["n"] == 0
+
+
+def test_formatted_cards_render_in_the_shared_view(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    response = client.post(
+        "/api/cards",
+        json={
+            "front": "bold front",
+            "back": "plain back",
+            "front_rich": {
+                "version": 1,
+                "blocks": [
+                    {"type": "paragraph", "runs": [{"text": "bold front", "bold": True}]}
+                ],
+            },
+        },
+        headers=csrf_headers(client),
+    )
+    assert response.status_code == 201
+    share_path = _create_share(client, _deck_id(client))
+    view = TestClient(create_app(settings)).get(share_path)
+    assert view.status_code == 200
+    assert "<strong>bold front</strong>" in view.text
+
+
+def test_unformatted_shared_pages_escape_markup_like_text(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    client.post(
+        "/api/cards",
+        json={"front": "<script>alert(1)</script>", "back": "2 < 3"},
+        headers=csrf_headers(client),
+    )
+    share_path = _create_share(client, _deck_id(client))
+    view = TestClient(create_app(settings)).get(share_path)
+    assert "<script>alert(1)</script>" not in view.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in view.text
+
+
+# --- Deck export (#5 groundwork) --------------------------------------------
+
+
+def test_export_is_versioned_and_owned_only(client: TestClient, settings: Settings) -> None:
+    import json as jsonlib
+
+    register(client, "alice")
+    headers = csrf_headers(client)
+    client.post("/api/cards", json={"front": "Q1", "back": "A1"}, headers=headers)
+    client.post("/api/cards", json={"front": "Q2", "back": "A2"}, headers=headers)
+    deck_id = _deck_id(client)
+
+    response = client.get(f"/decks/{deck_id}/export.json")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert "attachment" in response.headers["content-disposition"]
+    payload = jsonlib.loads(response.text)
+    assert payload["format"] == "virtual-index-card/deck"
+    assert payload["version"] == 1
+    assert payload["deck"]["name"] == "My Deck 1"
+    assert [card["front"] for card in payload["cards"]] == ["Q1", "Q2"]
+    # Never credentials, internal ids, or sharing tokens.
+    assert "alice" not in response.text
+    assert "token" not in response.text.lower()
+    assert "user_id" not in response.text
+
+    anonymous = TestClient(create_app(settings))
+    assert anonymous.get(f"/decks/{deck_id}/export.json").status_code == 401
+    assert anonymous.get(f"/decks/{deck_id}/export.json", follow_redirects=False).status_code == 401
+
+    other = TestClient(create_app(settings))
+    register(other, "bob")
+    assert other.get(f"/decks/{deck_id}/export.json").status_code == 404
+
+
+def test_export_enforces_configured_limits(tmp_path) -> None:
+    from virtual_index_card.config import Settings
+
+    settings = Settings(
+        database_path=tmp_path / "limits.sqlite3",
+        cookie_secure=False,
+        max_export_rows=1,
+    )
+    with TestClient(create_app(settings)) as client:
+        register(client, "alice")
+        headers = csrf_headers(client)
+        client.post("/api/cards", json={"front": "Q1", "back": "A1"}, headers=headers)
+        client.post("/api/cards", json={"front": "Q2", "back": "A2"}, headers=headers)
+        response = client.get(f"/decks/{_deck_id(client)}/export.json")
+        assert response.status_code == 413
+        assert "VIC_MAX_EXPORT_ROWS" in response.text

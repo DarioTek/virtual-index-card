@@ -7,7 +7,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Sequence
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_STATEMENTS: Sequence[str] = (
     """
@@ -72,6 +72,19 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     )
     """,
     "CREATE INDEX idx_account_requests_status ON account_requests(status, id)",
+    """
+    CREATE TABLE deck_shares (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        deck_id    INTEGER NOT NULL,
+        user_id    INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT,
+        FOREIGN KEY (deck_id, user_id) REFERENCES decks(id, user_id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX idx_deck_shares_deck ON deck_shares(deck_id, revoked_at)",
+    "CREATE INDEX idx_deck_shares_user ON deck_shares(user_id)",
 )
 
 # Additive migration from schema version 1 (users without role, no account_requests).
@@ -143,6 +156,24 @@ MIGRATION_3_TO_4: Sequence[str] = (
     "ALTER TABLE cards ADD COLUMN back_rich TEXT",
 )
 
+# Deck shares are indexable rows rather than deck columns so rotation keeps the
+# revocation history and the composite key lets deck deletion cascade.
+MIGRATION_4_TO_5: Sequence[str] = (
+    """
+    CREATE TABLE deck_shares (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        deck_id    INTEGER NOT NULL,
+        user_id    INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT,
+        FOREIGN KEY (deck_id, user_id) REFERENCES decks(id, user_id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX idx_deck_shares_deck ON deck_shares(deck_id, revoked_at)",
+    "CREATE INDEX idx_deck_shares_user ON deck_shares(user_id)",
+)
+
 
 def connect(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
@@ -169,15 +200,25 @@ def initialize(path: Path) -> None:
                     connection.execute(statement)
                 for statement in MIGRATION_3_TO_4:
                     connection.execute(statement)
+                for statement in MIGRATION_4_TO_5:
+                    connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             elif version == 2:
                 for statement in MIGRATION_2_TO_3:
                     connection.execute(statement)
                 for statement in MIGRATION_3_TO_4:
                     connection.execute(statement)
+                for statement in MIGRATION_4_TO_5:
+                    connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             elif version == 3:
                 for statement in MIGRATION_3_TO_4:
+                    connection.execute(statement)
+                for statement in MIGRATION_4_TO_5:
+                    connection.execute(statement)
+                connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            elif version == 4:
+                for statement in MIGRATION_4_TO_5:
                     connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             elif version != SCHEMA_VERSION:

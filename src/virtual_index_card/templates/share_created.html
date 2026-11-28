@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Link ready · Virtual Index Cards{% endblock %}
+{% block content %}
+<section class="auth-panel" aria-labelledby="share-heading">
+  <h1 id="share-heading">{{ heading }}</h1>
+  <p class="muted">Deck: <strong>{{ deck['name'] }}</strong></p>
+  <p>{{ detail }}</p>
+  <label for="share-url">Public link</label>
+  <input id="share-url" class="share-url" value="{{ share_url }}" readonly
+         onfocus="this.select()" autocomplete="off" spellcheck="false">
+  <p class="notice-warning">
+    This link is a bearer secret. It is shown only on this page and is not stored
+    in readable form, so it cannot be shown again. Copy it now.
+  </p>
+  <div class="owner-actions">
+    <a class="link-button" href="/?deck_id={{ deck['id'] }}">Back to deck</a>
+    <form method="post" action="/decks/{{ deck['id'] }}/share/revoke">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger">Revoke this link</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -361,6 +361,70 @@ def delete_empty_deck(
     return "last_deck"
 
 
+
+# --- Deck shares -------------------------------------------------------------
+def create_deck_share(
+    connection: sqlite3.Connection,
+    user_id: int,
+    deck_id: int,
+    token_hash: str,
+    created_at: str,
+) -> int | None:
+    """Record a share token hash for an owned deck; None when the deck is not owned."""
+    owned = connection.execute(
+        "SELECT 1 FROM decks WHERE id = ? AND user_id = ?", (deck_id, user_id)
+    ).fetchone()
+    if owned is None:
+        return None
+    cursor = connection.execute(
+        "INSERT INTO deck_shares (deck_id, user_id, token_hash, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (deck_id, user_id, token_hash, created_at),
+    )
+    return int(cursor.lastrowid)
+
+
+def get_active_deck_share(
+    connection: sqlite3.Connection, user_id: int, deck_id: int
+) -> sqlite3.Row | None:
+    """Return the single unrevoked share for an owned deck, if any."""
+    return connection.execute(
+        "SELECT * FROM deck_shares "
+        "WHERE user_id = ? AND deck_id = ? AND revoked_at IS NULL "
+        "ORDER BY id DESC LIMIT 1",
+        (user_id, deck_id),
+    ).fetchone()
+
+
+def revoke_deck_shares(
+    connection: sqlite3.Connection,
+    user_id: int,
+    deck_id: int,
+    revoked_at: str,
+) -> int:
+    """Revoke every active share for an owned deck; returns how many were revoked."""
+    cursor = connection.execute(
+        "UPDATE deck_shares SET revoked_at = ? "
+        "WHERE user_id = ? AND deck_id = ? AND revoked_at IS NULL",
+        (revoked_at, user_id, deck_id),
+    )
+    return cursor.rowcount
+
+
+def resolve_share_token(
+    connection: sqlite3.Connection, token_hash: str
+) -> sqlite3.Row | None:
+    """Return the active share (with its deck) for a token hash, or None."""
+    return connection.execute(
+        "SELECT s.id AS share_id, s.created_at AS shared_at, "
+        "       d.id AS deck_id, d.name AS deck_name, d.user_id AS owner_id "
+        "FROM deck_shares s JOIN decks d ON d.id = s.deck_id "
+        "WHERE s.token_hash = ? AND s.revoked_at IS NULL",
+        (token_hash,),
+    ).fetchone()
+
+
+
 # --- Cards -----------------------------------------------------------------
 def list_cards(
     connection: sqlite3.Connection, user_id: int, deck_id: int | None = None
