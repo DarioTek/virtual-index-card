@@ -18,7 +18,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** The user explicitly requested SQLite for any data needing persistence.
 - **Decision:** Store users, session hashes, cards, positions, and schema version in SQLite via `sqlite3`.
 - **Alternatives considered:** Browser storage, hosted database service, JSON files.
-- **Consequences:** No extra database service; file-level backups remain essential (`BL-023`).
+- **Consequences:** No extra database service; file-level backups remain essential (tracked as a GitHub Issue).
 
 ## TD-003: Durable deck order with Fisher–Yates shuffle
 
@@ -32,7 +32,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 ## TD-004: One deck, plain-text notes
 
 - **Date:** 2026-11-24
-- **Status:** Accepted
+- **Status:** Superseded by `TD-012` (multiple decks) and `TD-015` (rich-text notes)
 - **Context:** The user accepted one deck and plain-text notes for the first release.
 - **Decision:** No deck selector or formatting toolbar; validate non-empty text and render with Jinja auto-escaping.
 - **Alternatives considered:** Multiple decks, Markdown/rich text.
@@ -45,7 +45,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** `.gitignore` anticipated Python tooling; Python 3.11 is available and the app needs server rendering, an API, and SQLite.
 - **Decision:** Python 3.11+, FastAPI, Jinja2, `sqlite3`, `pyproject.toml` with `[dependency-groups]`, uv for environment/lockfile management, and pytest with the Starlette test client.
 - **Alternatives considered:** Node/Express with a SQLite driver; ORM-heavy framework.
-- **Consequences:** Few runtime dependencies and reproducible installs from committed `uv.lock`. `uv sync --group dev` and `uv run pytest -q` were verified with 20 passing tests.
+- **Consequences:** Few runtime dependencies and reproducible installs from committed `uv.lock`. `uv sync --group dev` and `uv run pytest -q` were verified at the time; run the command for the current result.
 
 ## TD-006: Layered boundaries
 
@@ -60,10 +60,10 @@ Product decisions were confirmed by the user; implementation choices below were 
 
 - **Date:** 2026-11-24
 - **Status:** Accepted
-- **Context:** The user chose individual accounts for the hosted app, resolving `BL-021`.
+- **Context:** The user chose individual accounts for the hosted app.
 - **Decision:** PBKDF2 password hashes with per-user salts, random session tokens stored only as SHA-256 hashes in SQLite, HttpOnly cookies, logout deletion, and double-submit CSRF tokens.
 - **Alternatives considered:** Single shared password; no authentication; third-party identity provider.
-- **Consequences:** Account isolation is enforced in every query. Password reset/email verification remain deferred (`BL-024`).
+- **Consequences:** Account isolation is enforced in every query. Admin-issued password reset exists; emailed delivery and self-service reset remain open backlog work.
 
 ## TD-008: Access control, TLS, and backups as release gates
 
@@ -72,7 +72,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** Hosting a notes app exposes it to the internet; SQLite stores everything in one file.
 - **Decision:** Treat access control, HTTPS, and tested backups as prerequisites for public deployment.
 - **Alternatives considered:** Ship first, harden later; private-network-only operation.
-- **Consequences:** Access control is delivered; TLS (`BL-022`) and backups (`BL-023`) are still open, so public deployment is not yet approved.
+- **Consequences:** Access control is delivered; TLS and backups are still open GitHub Issues, so public deployment is not yet approved.
 
 ## TD-009: Administrator-approved accounts with shown-once credentials
 
@@ -81,7 +81,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** Open self-registration had to be closed: the app creates one private deck per account and is intended for a small, controlled audience. The user asked for an administrator role who approves account-creation requests, after which the user receives an account name/password to log in.
 - **Decision:** Replace open registration with an account-request queue. Visitors file a request (desired account name, optional contact/note); administrators (`users.role = 'admin'`) approve or reject at `/admin/requests`. Approval creates the account with the requested or an edited account name and an admin-chosen or generated temporary password (unambiguous alphabet) that is displayed **once** to the administrator, who relays it out of band. Decisions are atomic (`UPDATE ... WHERE status = 'pending'`). Administrators can also reset a generated account's password, which signs the user out everywhere. Schema v2 migrates v1 in place (additive only); existing accounts become `user`. The first administrator is bootstrapped out of band: `python -m virtual_index_card.create_admin` or `VIC_ADMIN_USERNAME`/`VIC_ADMIN_PASSWORD` at startup.
 - **Alternatives considered:** Requester chooses a password at request time (activation-on-approval); automatic email delivery of credentials; invite tokens generated by admins; per-request plaintext password storage to allow re-display.
-- **Consequences:** Account creation is centrally controlled and auditable (`decided_by`, `decided_at`, `created_user_id`). Credentials travel out of band, so their delivery depends on the administrator's contact channel and mail hygiene (no automated delivery until mail is configured; `BL-024`). Lost credentials require a reset from the queue or `create_admin`. Passwords are never stored or re-displayed; a reset is the only recovery path. One-time display means an administrator who refreshes the result page loses the value — the page states this explicitly.
+- **Consequences:** Account creation is centrally controlled and auditable (`decided_by`, `decided_at`, `created_user_id`). Credentials travel out of band, so their delivery depends on the administrator's contact channel and mail hygiene (no automated delivery until mail is configured). Lost credentials require a reset from the queue or `create_admin`. Passwords are never stored or re-displayed; a reset is the only recovery path. One-time display means an administrator who refreshes the result page loses the value — the page states this explicitly.
 
 ## TD-010: Administrator user management with protected admin accounts
 
@@ -90,7 +90,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Context:** After adding the request queue, administrators still had no way to see all existing accounts or remove/reset non-admin ones (e.g. revoking access when someone leaves).
 - **Decision:** Add `/admin/users` listing every account (username, role badge, card count, created date) with per-row actions. **Delete** is permanent and limited to non-admin accounts — it cascades to cards and sessions via existing foreign keys, and approval-audit rows are kept with `created_user_id`/`decided_by` set to NULL. **Reset password** reuses the shown-once generation endpoint for any non-admin account, not only approved ones. Administrator accounts are protected from both actions in the web UI (reset via `create_admin --password`, removal by role change out of band), so the last admin cannot lock the web UI. Deletes ask for browser confirmation, matching the existing delete-card pattern.
 - **Alternatives considered:** Soft-delete/undo; deleting admin accounts from the UI with a last-admin guard; full-text search/pagination (deferred — the audience is small).
-- **Consequences:** Revocation no longer requires shell access. Destructive deletes are one click past a browser confirm; backups (`BL-023`) remain the recovery path. No schema change was needed.
+- **Consequences:** Revocation no longer requires shell access. Destructive deletes are one click past a browser confirm; backups remain the recovery path. No schema change was needed.
 
 ## TD-011: Admin profile page with session-safe password change
 
@@ -106,7 +106,7 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Date:** 2026-11-27
 - **Status:** Accepted
 - **Context:** Issue #1 requested multiple decks for different topics. The user specified generated names `My Deck 1`, `My Deck 2`, and so on.
-- **Decision:** Each account owns independent decks. New accounts and upgraded accounts receive an initial `My Deck 1`; additional decks receive the next sequential account-local name. The existing management and Review pages select a deck through `deck_id`; omitted IDs resolve to the account's first deck for compatibility. Deck rename, delete, sharing, and import/export are not part of this change.
+- **Decision:** Each account owns independent decks. New accounts and upgraded accounts receive an initial `My Deck 1`; additional decks receive the next sequential account-local name. The existing management and Review pages select a deck through `deck_id`; omitted IDs resolve to the account's first deck for compatibility. Deck sharing and import/export are not part of this change (rename and delete were delivered later by `TD-013` and `TD-014`).
 - **Alternatives considered:** Keep one deck; prompt for a custom name at creation; migrate existing data to a differently named default; use a separate deck-specific page hierarchy.
 - **Consequences:** Schema v3 associates cards with both their owner and deck. The v2 → v3 migration preserves existing card records and saved ordering. Deck-specific queries and API paths must validate ownership on every request.
 
@@ -137,7 +137,18 @@ Product decisions were confirmed by the user; implementation choices below were 
 - **Alternatives considered:** Storing raw or Bleach-sanitized HTML in `cards.front`/`cards.back` (risks misinterpreting markup-like plain text in existing cards or leaking unintended HTML attributes); storing Markdown (does not natively represent underline or multi-color spans cleanly and introduces parser ambiguity on existing plain-text notes).
 - **Consequences:** Existing v3 cards migrate cleanly with `NULL` rich columns and zero markup interpretation. Management, Edit, Review, and future public sharing (#4) share the same safe renderer. Future JSON import/export (#5) can include optional `front_rich` / `back_rich` fields alongside plain `front` / `back` for full-fidelity round-trips. Partially supersedes `TD-004` ("plain-text notes").
 
+## TD-016: Public read-only deck links with hashed, shown-once tokens
+
+- **Date:** 2026-11-28
+- **Status:** Accepted
+- **Context:** Issue #4 asks owners to share one deck with people who have no account, read-only, revocably, without exposing owner data or other decks. `TD-014` already requires that deleting an eligible empty deck revokes access, and `TD-009` established the shown-once pattern for temporary passwords.
+- **Decision:** Add `deck_shares(id, deck_id, user_id, token_hash UNIQUE, created_at, revoked_at)` in schema v5 with `FOREIGN KEY (deck_id, user_id) ... ON DELETE CASCADE`. Tokens come from `secrets.token_urlsafe(32)`; only `sha256(token)` is stored, so the full link is displayed exactly once when created or rotated and cannot be recovered afterwards. One active link per deck: creating or rotating revokes the previous row first, keeping revocation history. The public route is `GET /s/{token}` with a `?index=` cursor over the saved `position` order. It renders a standalone template (not the authenticated layout) with no CSRF meta tag and no mutation routes; all mutating endpoints remain session- and CSRF-protected. Unknown, revoked, rotated, and deleted-deck tokens share one 404 response. Responses set `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, and `Referrer-Policy: no-referrer`. No expiry, no rate limiting, and no analytics.
+- **Alternatives considered:** Keeping the token next to the deck so the link can be re-displayed (rejected: a readable bearer secret at rest and in every page response); a revoked-at-column on `decks` (rejected: no rotation history and awkward cascades); cookie-bound or password-protected shares (rejected: #4 explicitly scopes out named-account sharing and viewer roles); permanent links with expiry (rejected: #4 lists mandatory expiration as out of scope).
+- **Consequences:** Sharing is link-only and lossy by design — an owner who loses the URL rotates to get a new one. The unauthenticated surface grows by one GET route whose only input is a 256-bit token, and each response is a small read-only page. Deck deletion cascades away links, so `TD-014`'s delete path stays safe. If future work adds expiry or rate limiting, it extends this table rather than replacing it.
+
 ## Superseded decisions
+
+Decisions that predate this record and were replaced before they were numbered. Numbered decisions are marked superseded by editing their own **Status** field (see `TD-004`), so this section does not grow.
 
 - Browser-only static app with `localStorage`.
 - Local-only Python server framed without hosting/access-control requirements.

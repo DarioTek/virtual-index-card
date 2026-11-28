@@ -40,9 +40,42 @@
       <button type="submit" class="secondary">Rename</button>
     </form>
     <a class="secondary link-button" href="/review?deck_id={{ deck['id'] }}">Review mode</a>
+    <a class="secondary link-button" href="/decks/{{ deck['id'] }}/export.json" download>Export JSON</a>
   </div>
 </section>
 {% if deck_error %}<p class="form-error" role="alert">{{ deck_error }}</p>{% endif %}
+
+<section class="share-panel" aria-labelledby="share-heading">
+  <h2 id="share-heading">Public link</h2>
+  {% if share_notice == 'revoked' %}
+  <p class="form-notice" role="status">The public link was revoked.</p>
+  {% endif %}
+  {% if share %}
+  <p class="muted">
+    This deck has an active read-only link, created {{ share['created_at'][:10] }}.
+    The link itself is only shown when it is created or rotated.
+  </p>
+  <div class="owner-actions">
+    <form method="post" action="/decks/{{ deck['id'] }}/share/rotate">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="secondary">Rotate link</button>
+    </form>
+    <form method="post" action="/decks/{{ deck['id'] }}/share/revoke">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger">Revoke link</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="muted">
+    Share this deck read-only with anyone who has the link. Viewers can flip and
+    browse cards but cannot change anything, and no account details are shown.
+  </p>
+  <form method="post" action="/decks/{{ deck['id'] }}/share">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Create public link</button>
+  </form>
+  {% endif %}
+</section>
 
 <section class="editor" aria-labelledby="new-card-heading">
   <h2 id="new-card-heading">Add a card</h2>

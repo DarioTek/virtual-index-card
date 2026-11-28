@@ -1,20 +1,23 @@
 """FastAPI application: accounts, account requests, card management, and shuffled Review."""
 
+import json
 import logging
+import re
 import time
 from contextlib import closing
 from dataclasses import asdict
+from sqlite3 import Connection
 from pathlib import Path
 from typing import Annotated, Any, Iterator
 
+import segno
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
-from sqlite3 import Connection
 
-from . import repository as repo
+from . import __version__, repository as repo
 from .admin import ensure_admin
 from .config import Settings, load_settings
 from .db import connect, initialize
@@ -31,6 +34,7 @@ from .formatting import PALETTE_COLORS, render_card_face
 from .security import (
     generate_temporary_password,
     hash_password,
+    hash_token,
     new_token,
     tokens_match,
     verify_password,
@@ -70,7 +74,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ) from exc
         logger.info("Administrator bootstrap for %r: %s", settings.admin_username, action)
 
-    app = FastAPI(title="Virtual Index Cards", version="0.2.0")
+    app = FastAPI(
+        title="Virtual Index Cards",
+        version=__version__,
+        # Interactive docs and the OpenAPI schema are exposed only in development.
+        # In production they are suppressed unless VIC_ENABLE_DOCS=true, so the
+        # unauthenticated surface stays limited to the application's own routes.
+        docs_url="/docs" if settings.enable_docs else None,
+        redoc_url="/redoc" if settings.enable_docs else None,
+        openapi_url="/openapi.json" if settings.enable_docs else None,
+    )
     app.state.settings = settings
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
     templates.env.globals["render_card_face"] = render_card_face
@@ -607,6 +620,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     connection, int(user["id"]), int(deck["id"])
                 ),
                 "deck_error": error,
+                "share": repo.get_active_deck_share(
+                    connection, int(user["id"]), int(deck["id"])
+                ),
+                "share_notice": request.query_params.get("share_notice"),
                 "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
             },
             status_code=status_code,
@@ -685,6 +702,211 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return render_deck_page(
             request, user, connection, deck, error, status_code=409
         )
+
+    # --- Deck export (read-only, versioned JSON) ----------------------------
+    EXPORT_FORMAT = "virtual-index-card/deck"
+    EXPORT_VERSION = 1
+
+    @app.get("/decks/{deck_id}/export.json", tags=["decks"])
+    def export_deck(
+        deck_id: int,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+    ) -> Response:
+        """Download one owned deck as documented, versioned JSON (never credentials)."""
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        cards = repo.list_cards(connection, int(user["id"]), int(deck_id))
+        if len(cards) > settings.max_export_rows:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"This deck has {len(cards)} cards; the export limit is "
+                    f"{settings.max_export_rows} (VIC_MAX_EXPORT_ROWS)."
+                ),
+            )
+        payload = {
+            "format": EXPORT_FORMAT,
+            "version": EXPORT_VERSION,
+            "deck": {"name": deck["name"]},
+            "cards": [
+                {
+                    "front": card.front,
+                    "back": card.back,
+                    "front_rich": card.front_rich,
+                    "back_rich": card.back_rich,
+                }
+                for card in cards
+            ],
+        }
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        if len(body) > settings.max_export_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"The export is {len(body)} bytes; the limit is "
+                    f"{settings.max_export_bytes} (VIC_MAX_EXPORT_BYTES)."
+                ),
+            )
+        filename = re.sub(r"[^A-Za-z0-9._-]+", "-", deck["name"]).strip("-") or "deck"
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}.json"',
+                "Cache-Control": "no-store",
+            },
+        )
+
+    # --- Public read-only deck sharing --------------------------------------
+    # Share tokens are bearer secrets: only their SHA-256 hash is stored, so the
+    # full link is displayed exactly once (create/rotate), mirroring how temporary
+    # passwords are handled. Losing the link means rotating it.
+
+    def issue_share_token(
+        request: Request, connection: Connection, user: object, deck_id: int
+    ) -> str:
+        token = new_token()
+        now = utc_now()
+        with connection:
+            repo.revoke_deck_shares(connection, int(user["id"]), deck_id, now)
+            repo.create_deck_share(
+                connection, int(user["id"]), deck_id, hash_token(token), now
+            )
+        return token
+
+    def render_share_created(
+        request: Request,
+        user: object,
+        deck: object,
+        token: str,
+        heading: str,
+        detail: str,
+    ) -> HTMLResponse:
+        share_url = str(request.url_for("shared_deck_page", token=token))
+        qr_data_uri = segno.make(share_url, error="m").svg_data_uri(
+            scale=5, border=4, dark="#172033", light="#ffffff"
+        )
+        response = templates.TemplateResponse(
+            request,
+            "share_created.html",
+            {
+                "user": user,
+                "deck": deck,
+                "share_url": share_url,
+                "share_qr_data_uri": qr_data_uri,
+                "heading": heading,
+                "detail": detail,
+                "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+            },
+        )
+        # The response body contains the only copy of the secret token.
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post("/decks/{deck_id}/share", tags=["decks"])
+    def create_share_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        token = issue_share_token(request, connection, user, deck_id)
+        return render_share_created(
+            request,
+            user,
+            deck,
+            token,
+            heading="Public link created",
+            detail="Anyone with this link can read this deck. It cannot change "
+            "anything. Revoke it any time from the deck page. The link is shown "
+            "only on this page; if you lose it, rotate it to get a new one.",
+        )
+
+    @app.post("/decks/{deck_id}/share/rotate", tags=["decks"])
+    def rotate_share_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        deck = require_selected_deck(connection, int(user["id"]), deck_id)
+        token = issue_share_token(request, connection, user, deck_id)
+        return render_share_created(
+            request,
+            user,
+            deck,
+            token,
+            heading="Public link rotated",
+            detail="The previous link stops working immediately. Only this new "
+            "link grants read-only access, and it is shown only on this page.",
+        )
+
+    @app.post("/decks/{deck_id}/share/revoke", tags=["decks"])
+    def revoke_share_page(
+        deck_id: int,
+        request: Request,
+        user: Annotated[object, Depends(require_user)],
+        connection: Annotated[Connection, Depends(get_connection)],
+        csrf_token: Annotated[str | None, Form()] = None,
+    ) -> Response:
+        require_form_csrf(request, csrf_token)
+        require_selected_deck(connection, int(user["id"]), deck_id)
+        with connection:
+            repo.revoke_deck_shares(connection, int(user["id"]), deck_id, utc_now())
+        return RedirectResponse(
+            f"/?deck_id={deck_id}&share_notice=revoked", status_code=303
+        )
+
+    def render_shared_deck(
+        request: Request,
+        connection: Connection,
+        token: str,
+        index: int = 0,
+    ) -> HTMLResponse:
+        share = repo.resolve_share_token(connection, hash_token(token)) if token else None
+        if share is None:
+            # Unknown, revoked, rotated, and deleted-deck tokens are indistinguishable.
+            response = templates.TemplateResponse(
+                request, "shared_missing.html", {}, status_code=404
+            )
+        else:
+            cards = repo.list_cards(
+                connection, int(share["owner_id"]), int(share["deck_id"])
+            )
+            total = len(cards)
+            position = index % total if total else 0
+            response = templates.TemplateResponse(
+                request,
+                "shared_deck.html",
+                {
+                    "token": token,
+                    "deck_name": share["deck_name"],
+                    "card": cards[position] if cards else None,
+                    "position": position,
+                    "total": total,
+                    "prev_index": (position - 1) % total if total else 0,
+                    "next_index": (position + 1) % total if total else 0,
+                },
+            )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        # The token is in the URL path: never leak it to other origins.
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+    @app.get("/s/{token}", response_class=HTMLResponse, tags=["sharing"])
+    def shared_deck_page(
+        token: str,
+        request: Request,
+        connection: Annotated[Connection, Depends(get_connection)],
+        index: int = 0,
+    ) -> HTMLResponse:
+        return render_shared_deck(request, connection, token, index)
 
     @app.get("/", response_class=HTMLResponse, tags=["ui"])
     def deck_page(

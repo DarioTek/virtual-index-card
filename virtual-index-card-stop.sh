@@ -17,11 +17,11 @@ cd "$PROJECT_DIR" || { echo "[ERROR] Project directory not found: $PROJECT_DIR";
 # Ensure logs directory exists
 mkdir -p "$PROJECT_DIR/logs"
 
-# Set the database path and run Gunicorn with Uvicorn workers in the background
+# Set the database path before stopping the background Gunicorn process
 echo "Stopping Virtual Index Card app with Gunicorn..."
 export VIC_DATABASE_PATH="./data/virtual-index-card.sqlite3"
 
-# Note: Ensure 'gunicorn' process id (PID) is stopped/killed
+# Stop the process using the PID file written by virtual-index-card-start.sh
 kill "$(cat $PROJECT_DIR/gunicorn.pid)"
 
 echo "Virtual Index Card stopped. Check logs at $PROJECT_DIR/logs/virtual_index_card.log"

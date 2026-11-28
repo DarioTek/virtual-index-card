@@ -103,6 +103,12 @@ CREATE TABLE account_requests (
     created_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 """
+# Schema v4 = v3 plus the rich-text columns added by migration 3 -> 4.
+V4_SCHEMA = V3_SCHEMA + """
+ALTER TABLE cards ADD COLUMN front_rich TEXT;
+ALTER TABLE cards ADD COLUMN back_rich TEXT;
+"""
+
 
 
 def test_request_form_is_shown(client: TestClient) -> None:
@@ -546,9 +552,10 @@ def test_migration_from_schema_v1(tmp_path) -> None:
         ).fetchone()[0]
     finally:
         migrated.close()
-    assert version == 4
+    assert version == 5
     assert role == "user"
     assert "account_requests" in tables
+    assert "deck_shares" in tables
     assert migrated_deck == "My Deck 1"
 
 
@@ -577,7 +584,7 @@ def test_migration_from_schema_v2_preserves_cards_and_order(tmp_path) -> None:
     initialize(database)
     migrated = sqlite3.connect(database)
     try:
-        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 5
         deck_id, name = migrated.execute(
             "SELECT id, name FROM decks WHERE user_id = 1"
         ).fetchone()
@@ -635,7 +642,10 @@ def test_migration_from_schema_v3_preserves_plain_text_cards(tmp_path) -> None:
 
     migrated = sqlite3.connect(database)
     try:
-        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert migrated.execute(
+            "SELECT COUNT(*) FROM deck_shares"
+        ).fetchone()[0] == 0
         row = migrated.execute(
             "SELECT front, back, front_rich, back_rich FROM cards WHERE id = 10"
         ).fetchone()
@@ -645,16 +655,59 @@ def test_migration_from_schema_v3_preserves_plain_text_cards(tmp_path) -> None:
         migrated.close()
 
 
-def test_fresh_databases_use_schema_v4(tmp_path) -> None:
+def test_fresh_databases_use_schema_v5(tmp_path) -> None:
     database = tmp_path / "fresh.sqlite3"
     settings = Settings(database_path=database)
     create_app(settings)
     connection = sqlite3.connect(database)
     try:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
     finally:
         connection.close()
-    assert version == 4
+    assert version == 5
+    assert {"users", "decks", "cards", "sessions", "account_requests", "deck_shares"} <= tables
+
+
+def test_migration_from_schema_v4_adds_deck_shares(tmp_path) -> None:
+    """A v4 database gains deck_shares without touching existing cards."""
+    database = tmp_path / "v4.sqlite3"
+    connection = sqlite3.connect(database)
+    try:
+        connection.executescript(V4_SCHEMA)
+        connection.execute(
+            "INSERT INTO users (id, username, salt, password_hash, role, created_at) "
+            "VALUES (1, 'legacy', 'salt', 'digest', 'user', '2026-11-24T00:00:00+00:00')"
+        )
+        connection.execute(
+            "INSERT INTO decks (id, user_id, name, created_at) "
+            "VALUES (1, 1, 'My Deck 1', '2026-11-24T00:00:00+00:00')"
+        )
+        connection.execute(
+            "INSERT INTO cards (id, user_id, deck_id, front, back, position, created_at, updated_at) "
+            "VALUES (5, 1, 1, 'front', 'back', 0, 'c', 'u')"
+        )
+        connection.execute("PRAGMA user_version = 4")
+        connection.commit()
+    finally:
+        connection.close()
+
+    initialize(database)
+    migrated = sqlite3.connect(database)
+    try:
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert migrated.execute("SELECT COUNT(*) FROM deck_shares").fetchone()[0] == 0
+        assert migrated.execute(
+            "SELECT front, back, front_rich, back_rich, position FROM cards WHERE id = 5"
+        ).fetchone() == ("front", "back", None, None, 0)
+        assert migrated.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        migrated.close()
 
 
 def test_unsupported_schema_version_is_rejected(tmp_path) -> None:

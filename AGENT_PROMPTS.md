@@ -37,6 +37,7 @@ Inspect the repository: structure, languages, frameworks, dependencies, configur
 ## Step 3: Document (planning artifacts only)
 - Create an initial PLAN.md for the first assignment (objective, scope, tasks in dependency order, acceptance criteria, test strategy, risks, open questions).
 - Under "Proposed Issues" in PLAN.md, draft the future work you identified (title, description, acceptance criteria, suggested labels). Do not create GitHub Issues yet.
+- Note any operations surface the project will need documented (start/stop scripts, CI workflows, deployment runbooks, environment-variable examples) as proposed documents in PLAN.md rather than writing them now.
 - Do not create or modify any other files (including docs/architecture.md, README.md, or source code) until I approve.
 
 ## Constraints

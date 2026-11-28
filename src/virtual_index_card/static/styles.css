@@ -631,3 +631,46 @@ label { color: var(--ink-soft); font-size: 0.88rem; font-weight: 650; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* --- Shared read-only deck and public-link panels ------------------------- */
+.share-panel {
+  margin-block: 1.25rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.share-panel h2 { margin: 0 0 0.5rem; font-size: 1.02rem; }
+.share-panel form { margin: 0; }
+.share-url {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88rem;
+}
+.share-qr { margin: 1rem 0 0.25rem; text-align: center; }
+.share-qr-image {
+  display: block;
+  width: min(100%, 15.3rem);
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.share-qr figcaption { margin-top: 0.4rem; color: var(--muted); font-size: 0.88rem; }
+.owner-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.75rem; }
+.shared-header { text-align: center; margin-block: 0.5rem 1.5rem; }
+.shared-header h1 { margin: 0.15rem 0; }
+.shared-badge {
+  display: inline-block;
+  margin: 0;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.shared-footer { margin-top: 2rem; text-align: center; }
