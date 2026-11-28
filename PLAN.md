@@ -1,3 +1,48 @@
+# Active plan: Show a QR code for public deck links
+
+## Objective
+
+Add a locally generated QR code for the exact public URL on the existing shown-once share-created page. The QR must work for both newly created and rotated links, remain available without relying on a third-party QR service, and preserve the bearer-secret page's existing no-store behavior.
+
+**Status:** Completed 2026-11-28. This was a direct user request related to the completed #4 sharing feature; #4 remains closed and was not reopened. The queued #5 import work is deferred until separately planned.
+
+## Scope and approach
+
+- Use a small server-side QR encoder dependency and render the URL as an inline SVG on `share_created.html`; do not send the URL to an external service or persist additional token data.
+- Keep QR generation on the same response that already exposes the link once; retain `Cache-Control: no-store` and give the image an accessible label.
+- Add coverage proving the QR represents the generated public URL and is present for rotation as well as initial creation.
+- Update the architecture/security description and changelog to note the local QR display and its bearer-secret implications.
+
+## Tasks and acceptance criteria
+
+| # | Task | Likely components | Status |
+|---|---|---|---|
+| 1 | Confirm share-page flow, dependencies, and document the approach | `PLAN.md`, `app.py`, `share_created.html`, `pyproject.toml` | Completed |
+| 2 | Generate an inline QR code for each shown-once public URL | `app.py`, `share_created.html`, `pyproject.toml`, `uv.lock`, `static/styles.css` | Completed |
+| 3 | Add tests for QR content, rotation, and no-store behavior | `tests/test_app.py` | Completed |
+| 4 | Update docs/changelog, run validation, and review the diff | `docs/architecture.md`, `CHANGELOG.md`, `PLAN.md` | Completed |
+
+- [x] Both create and rotate pages display a QR generated from exactly the displayed public URL.
+- [x] QR generation is local; no third-party request or image host is used.
+- [x] The secret-bearing response remains `Cache-Control: no-store`; the page communicates that the QR is itself a bearer secret.
+- [x] Accessible markup provides an appropriate text alternative/label.
+- [x] Targeted and standard validation pass; documentation and this plan match the delivered behavior.
+
+**Risk:** The QR is another visual representation of the bearer secret, so anyone who can photograph the page can access the deck. Mitigate by displaying it only on the same shown-once, no-store page and explaining this alongside the URL.
+
+## Progress log
+
+- 2026-11-28: Inspected the completed #4 share flow, its shown-once response and tests, current dependencies, relevant docs, branch status, and GitHub issue state. No changes were present before this task.
+- 2026-11-28: Added `segno` and generated an inline SVG QR from the exact `request.url_for()` URL in the create/rotate response. Added an accessible image alternative and clear bearer-secret warning; the response remains `no-store`.
+- 2026-11-28: Added test assertions that compare the displayed data URI with the QR generated from the displayed URL, for both create and rotate flows. The first targeted run exposed a test-regex assumption about line breaks in HTML attributes; adjusted the whitespace match, then targeted tests passed.
+- 2026-11-28: Updated `docs/architecture.md` and `CHANGELOG.md`. Validation passed: `uv sync --group dev`; targeted sharing tests (3 passed); full `uv run pytest -q` (112 passed, 1 existing Starlette/httpx deprecation warning); compileall; `node --check` for `app.js` and `shared.js`; `git diff --check`.
+
+## Next Recommended Action
+
+This QR follow-up is complete. The next queued assignment remains Issue #5 (JSON import); create and present its implementation plan for review before beginning that substantial work.
+
+---
+
 # Implementation record: Revocable public read-only deck links (#4) — closed
 
 ## Objective
@@ -6,7 +51,7 @@ Implement [GitHub Issue #4](https://github.com/DarioTek/virtual-index-card/issue
 
 **Status:** **Closed 2026-11-28.** All acceptance criteria below were verified against the code before closing. Delivered in `13681e7`, hardened in `f6448bc`. See "Implementation notes" for where the delivery differs from the original design.
 
-**Next assignment:** [#5 — versioned full-fidelity JSON deck import and export](https://github.com/DarioTek/virtual-index-card/issues/5). Export already ships; #5 now only needs the import half. No plan is open for it yet.
+**Next queued issue at closure:** [#5 — versioned full-fidelity JSON deck import and export](https://github.com/DarioTek/virtual-index-card/issues/5). Export already ships; #5 now only needs the import half. A later user-requested QR-code follow-up is recorded in the active plan above; #5 remains queued.
 
 ## Confirmed scope and proposed design decisions
 

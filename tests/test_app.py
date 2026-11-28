@@ -1,5 +1,7 @@
+import html
 import re
 
+import segno
 from fastapi.testclient import TestClient
 
 from virtual_index_card.app import create_app
@@ -748,6 +750,24 @@ def test_openapi_version_matches_package_version(settings: Settings) -> None:
 # --- Public read-only deck sharing (#4) -------------------------------------
 
 
+def _assert_share_qr(response: object) -> str:
+    """Assert the inline SVG QR is generated from the displayed bearer URL."""
+    link_match = re.search(r'id="share-url" class="share-url" value="([^"]+)"', response.text)
+    qr_match = re.search(
+        r'class="share-qr-image"\s+src="([^"]+)"\s+alt="([^"]+)"', response.text
+    )
+    assert link_match is not None, response.text
+    assert qr_match is not None, response.text
+    share_url = html.unescape(link_match.group(1))
+    qr_data_uri = html.unescape(qr_match.group(1))
+    expected = segno.make(share_url, error="m").svg_data_uri(
+        scale=5, border=4, dark="#172033", light="#ffffff"
+    )
+    assert qr_data_uri == expected
+    assert "Anyone who scans it can read this deck" in html.unescape(qr_match.group(2))
+    return share_url
+
+
 def _create_share(client: TestClient, deck_id: str) -> str:
     """Create or rotate a share link and return its public path."""
     response = client.post(
@@ -756,9 +776,8 @@ def _create_share(client: TestClient, deck_id: str) -> str:
         follow_redirects=False,
     )
     assert response.status_code == 200, response.text
-    match = re.search(r'id="share-url" class="share-url" value="([^"]+)"', response.text)
-    assert match is not None, response.text
-    return "/" + match.group(1).split("/", 3)[3]
+    share_url = _assert_share_qr(response)
+    return "/" + share_url.split("/", 3)[3]
 
 
 def _deck_id(client: TestClient) -> str:
@@ -822,7 +841,9 @@ def test_share_created_page_is_not_cacheable(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
+    _assert_share_qr(response)
     assert "shown only on this page" in response.text
+    assert "QR code are bearer secrets" in response.text
 
 
 def test_share_requires_owner_and_csrf(client: TestClient, settings: Settings) -> None:
@@ -859,9 +880,8 @@ def test_share_rotation_and_revocation(client: TestClient, settings: Settings) -
     )
     assert rotated.status_code == 200
     assert "rotated" in rotated.text.lower()
-    new_path = "/" + re.search(
-        r'id="share-url" class="share-url" value="([^"]+)"', rotated.text
-    ).group(1).split("/", 3)[3]
+    rotated_url = _assert_share_qr(rotated)
+    new_path = "/" + rotated_url.split("/", 3)[3]
     assert new_path != first
     assert anonymous.get(first).status_code == 404
     assert anonymous.get(new_path).status_code == 200

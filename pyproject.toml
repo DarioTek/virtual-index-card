@@ -15,6 +15,7 @@ dependencies = [
     "gunicorn>=23,<24",
     "uvicorn-worker>=0.3,<1",
     "python-dotenv>=1,<2",
+    "segno>=1.6,<2",
 ]
 
 [dependency-groups]

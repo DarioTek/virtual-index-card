@@ -8,9 +8,16 @@
   <label for="share-url">Public link</label>
   <input id="share-url" class="share-url" value="{{ share_url }}" readonly
          onfocus="this.select()" autocomplete="off" spellcheck="false">
+  <figure class="share-qr">
+    <img class="share-qr-image" src="{{ share_qr_data_uri }}"
+         alt="QR code for the public link to {{ deck['name'] }}. Anyone who scans it can read this deck."
+         width="245" height="245">
+    <figcaption>Scan to open this deck's public link.</figcaption>
+  </figure>
   <p class="notice-warning">
-    This link is a bearer secret. It is shown only on this page and is not stored
-    in readable form, so it cannot be shown again. Copy it now.
+    This link and QR code are bearer secrets. Anyone who sees or scans them can
+    read this deck. They are shown only on this page and are not stored in
+    readable form, so they cannot be shown again. Copy or scan the link now.
   </p>
   <div class="owner-actions">
     <a class="link-button" href="/?deck_id={{ deck['id'] }}">Back to deck</a>

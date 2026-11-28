@@ -6,15 +6,16 @@ import re
 import time
 from contextlib import closing
 from dataclasses import asdict
+from sqlite3 import Connection
 from pathlib import Path
 from typing import Annotated, Any, Iterator
 
+import segno
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
-from sqlite3 import Connection
 
 from . import __version__, repository as repo
 from .admin import ensure_admin
@@ -781,13 +782,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         heading: str,
         detail: str,
     ) -> HTMLResponse:
+        share_url = str(request.url_for("shared_deck_page", token=token))
+        qr_data_uri = segno.make(share_url, error="m").svg_data_uri(
+            scale=5, border=4, dark="#172033", light="#ffffff"
+        )
         response = templates.TemplateResponse(
             request,
             "share_created.html",
             {
                 "user": user,
                 "deck": deck,
-                "share_url": str(request.url_for("shared_deck_page", token=token)),
+                "share_url": share_url,
+                "share_qr_data_uri": qr_data_uri,
                 "heading": heading,
                 "detail": detail,
                 "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
