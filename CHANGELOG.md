@@ -8,7 +8,7 @@ Backlog items that are not yet released are tracked as GitHub Issues, not in thi
 
 ### Added
 
-- Public read-only deck links (#4): owners create, rotate, and revoke an unlisted link that renders one deck for anonymous visitors. Tokens are bearer secrets stored only as SHA-256 hashes and displayed once; shared responses are `no-store` and `noindex`.
+- Public read-only deck links (#4): owners create, rotate, and revoke an unlisted link that renders one deck for anonymous visitors. Tokens are bearer secrets stored only as SHA-256 hashes and displayed once; shared responses are `no-store`, `noindex`, and `no-referrer`.
 - Versioned, full-fidelity JSON export of a single owned deck at `/decks/{id}/export.json`, with configurable `VIC_MAX_EXPORT_ROWS` and `VIC_MAX_EXPORT_BYTES` limits (HTTP 413 when exceeded).
 - `.env` file support via `python-dotenv`: `load_settings()` reads a `.env` in the working directory, and real environment variables take precedence. See `.env.example`.
 - `docs/operations.md` documenting the start/stop scripts, PID and log files, and how they differ from the systemd unit.

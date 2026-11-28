@@ -1,10 +1,12 @@
-# Active plan: Revocable public read-only deck links (#4) — implemented
+# Implementation record: Revocable public read-only deck links (#4) — closed
 
 ## Objective
 
 Implement [GitHub Issue #4](https://github.com/DarioTek/virtual-index-card/issues/4): let a deck owner generate an unlisted, unguessable, revocable public link that shows one deck's cards read-only to visitors without an account — without granting mutation, exposing owner data, or weakening the existing session/CSRF boundaries.
 
-**Status:** Implemented and validated on 2026-11-28. Issue #4 remains open until the acceptance criteria below are confirmed and the user authorizes closing it. See "Implementation notes" for where the delivery differs from the original design.
+**Status:** **Closed 2026-11-28.** All acceptance criteria below were verified against the code before closing. Delivered in `13681e7`, hardened in `f6448bc`. See "Implementation notes" for where the delivery differs from the original design.
+
+**Next assignment:** [#5 — versioned full-fidelity JSON deck import and export](https://github.com/DarioTek/virtual-index-card/issues/5). Export already ships; #5 now only needs the import half. No plan is open for it yet.
 
 ## Confirmed scope and proposed design decisions
 
@@ -102,14 +104,20 @@ Validation performed: `uv run pytest -q` (full suite green, one pre-existing Sta
 
 ## Progress log
 
+- 2026-11-28: Re-verified all eleven acceptance criteria against the code with an automated probe (link creation, anonymous access, deck isolation, navigation, mutation rejection, revocation, rotation, indistinguishable tokens, cascade on delete, no leakage). Fixed an unused import, a dead context variable, and a CSS rule referencing an undefined custom property; added `Referrer-Policy: no-referrer` to shared responses plus tests for card advancement, cookie absence, and `no-store` on the token-bearing page. Suite: 112 passed.
+- 2026-11-28: Closed Issue #4 with the validation summary; Pushed `f6448bc` to `arena/7ace61d0-virtual-index-card`.
 - 2026-11-28: Implemented schema v5 (`deck_shares` + migration), share repository functions, owner share routes, the anonymous `/s/{token}` route, the standalone shared templates and `shared.js`, the deck-page share panel, and the JSON export route with configurable limits.
 - 2026-11-28: Added `python-dotenv` as a runtime dependency with `.env` loading and integer validation in `config.py`.
 - 2026-11-28: Added `tests/test_config.py` and sharing/export coverage in `tests/test_app.py`; updated migration tests to schema v5 and added a v4 → v5 case.
 - 2026-11-28: Updated `README.md`, `docs/architecture.md`, `docs/technical-decisions.md` (TD-016), `docs/operations.md`, `.env.example`, and `CHANGELOG.md`.
 
+## Next Recommended Action (superseded)
+
+Completed: #4 was reviewed against its acceptance criteria, closed with a validation summary, and the follow-on hardening (`Referrer-Policy: no-referrer`, dead-code removal, stronger tests) shipped in `f6448bc`.
+
 ## Next Recommended Action
 
-Review the shared-deck implementation and the Issue #4 acceptance criteria. On your confirmation: close #4 with a summary comment, then open the plan for #5 (JSON import), which now only needs the import half plus collision handling.
+Open a plan for **#5 (JSON import)** as the next assignment. Remaining work there is the import half only: a documented versioned format, upload-size and card-count limits, name-collision handling, atomic rejection, and round-trip tests. Export, its envelope, and its configurable limits are already delivered and documented in `docs/architecture.md`.
 
 ## Proposed Issues
 
