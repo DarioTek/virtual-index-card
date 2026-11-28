@@ -4,7 +4,7 @@
 
 ## Product shape
 
-A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Owners can permanently delete an empty deck after confirmation as long as the account retains at least one deck. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Each card has a front and back supporting plain text or structured rich-text formatting (bold, italic, underline, and an accessible 6-color palette of black, green, red, orange, blue, and pink) up to 5,000 visible Unicode code points per side. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
+A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Owners can permanently delete an empty deck after confirmation as long as the account retains at least one deck. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Each card has a front and back supporting plain text or structured rich-text formatting (bold, italic, underline, and an accessible 4-color palette of black, green, red, and blue) up to 5,000 visible Unicode code points per side. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
 
 ## Components
 
@@ -110,7 +110,7 @@ The pytest suite covers domain/shuffle, rich-text canonicalization/contrast/sani
 ## Known limitations
 
 - Decks can be created with generated or custom names, selected, renamed, and deleted when empty and not the account's last deck; public sharing (#4) and JSON import/export (#5) are not implemented yet.
-- Card formatting is intentionally limited to bold, italic, underline, and the fixed 6-color accessible palette (no block-quote button, images, links, tables, lists, headings, or custom fonts).
+- Card formatting is intentionally limited to bold, italic, underline, and the fixed 4-color accessible palette (no block-quote button, orange/pink colors, images, links, tables, lists, headings, or custom fonts).
 - No automatic delivery of credentials — the administrator relays them out of band; mail-based recovery remains `BL-024`.
 - No password reset when the administrator is unreachable; administrators reset passwords from the request queue or with `create_admin`.
 - No HTTPS, backup automation, or CI yet (`BL-022`, `BL-023`, `BL-015`).

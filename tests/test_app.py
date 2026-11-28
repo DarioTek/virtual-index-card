@@ -512,7 +512,7 @@ def test_formatted_cards_round_trip_in_management_edit_and_review(
             },
             {
                 "type": "blockquote",
-                "runs": [{"text": "Quoted line 1\nQuoted line 2", "color": "orange"}],
+                "runs": [{"text": "Quoted line 1\nQuoted line 2", "color": "green"}],
             },
         ],
     }
@@ -523,7 +523,7 @@ def test_formatted_cards_round_trip_in_management_edit_and_review(
                 "type": "paragraph",
                 "runs": [
                     {"text": "Green ", "color": "green"},
-                    {"text": "Pink ", "color": "pink", "italic": True},
+                    {"text": "Blue ", "color": "blue", "italic": True},
                     {"text": "Red ", "color": "red", "underline": True},
                     {"text": "Black", "color": "black", "bold": True},
                 ],
@@ -545,7 +545,7 @@ def test_formatted_cards_round_trip_in_management_edit_and_review(
     card = created.json()["card"]
     card_id = card["id"]
     assert card["front"] == "Bold overlap\nQuoted line 1\nQuoted line 2"
-    assert card["back"] == "Green Pink Red Black"
+    assert card["back"] == "Green Blue Red Black"
     assert card["front_rich"] is not None
     assert card["back_rich"] is not None
 
@@ -554,10 +554,10 @@ def test_formatted_cards_round_trip_in_management_edit_and_review(
     assert "<strong>Bold </strong>" in management.text
     assert '<span class="fmt-color-blue"><strong><em><u>overlap</u></em></strong></span>' in management.text
     assert 'role="blockquote"' in management.text
-    assert '<span class="fmt-color-orange">Quoted line 1</span>' in management.text
-    assert '<span class="fmt-color-orange">Quoted line 2</span>' in management.text
+    assert '<span class="fmt-color-green">Quoted line 1</span>' in management.text
+    assert '<span class="fmt-color-green">Quoted line 2</span>' in management.text
     assert '<span class="fmt-color-green">Green </span>' in management.text
-    assert '<span class="fmt-color-pink"><em>Pink </em></span>' in management.text
+    assert '<span class="fmt-color-blue"><em>Blue </em></span>' in management.text
     assert '<span class="fmt-color-red"><u>Red </u></span>' in management.text
     assert '<span class="fmt-color-black"><strong>Black</strong></span>' in management.text
     assert '<script type="application/json" class="initial-rich-doc">' in management.text
@@ -566,7 +566,7 @@ def test_formatted_cards_round_trip_in_management_edit_and_review(
     assert review.status_code == 200
     assert '<span class="fmt-color-blue"><strong><em><u>overlap</u></em></strong></span>' in review.text
     assert 'role="blockquote"' in review.text
-    assert '<span class="fmt-color-pink"><em>Pink </em></span>' in review.text
+    assert '<span class="fmt-color-blue"><em>Blue </em></span>' in review.text
 
     updated = client.patch(
         f"/api/cards/{card_id}",
@@ -593,8 +593,10 @@ def test_formatting_toolbar_accessibility_attributes_present(client: TestClient)
         assert f'aria-label="{label}"' in page.text
     assert 'data-command="blockquote"' not in page.text
     assert 'aria-label="Block quote"' not in page.text
-    for color in ("Black", "Green", "Red", "Orange", "Blue", "Pink"):
+    for color in ("Black", "Green", "Red", "Blue"):
         assert f'aria-label="Text color: {color}"' in page.text
+    for removed in ("Orange", "Pink"):
+        assert f'aria-label="Text color: {removed}"' not in page.text
 
 
 def test_formatting_validation_boundaries_and_xss_defense(

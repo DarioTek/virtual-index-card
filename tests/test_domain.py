@@ -79,7 +79,7 @@ def _wcag_contrast_ratio(fg_hex: str, bg_hex: str) -> float:
 
 
 def test_palette_has_expected_colors_and_meets_wcag_aa_contrast() -> None:
-    assert set(PALETTE_COLORS.keys()) == {"black", "green", "red", "orange", "blue", "pink"}
+    assert set(PALETTE_COLORS.keys()) == {"black", "green", "red", "blue"}
     card_backgrounds = ("#fffefa", "#edf8f6", "#f9fffd", "#f3f6f9")
     for name, fg_hex in PALETTE_COLORS.items():
         for bg_hex in card_backgrounds:
@@ -102,7 +102,7 @@ def test_rich_formatting_canonicalizes_overlapping_styles_and_multiline_quotes()
             {
                 "type": "blockquote",
                 "runs": [
-                    {"text": "Line 1\nLine 2  ", "color": "orange", "italic": True},
+                    {"text": "Line 1\nLine 2  ", "color": "green", "italic": True},
                 ],
             },
         ],
@@ -121,11 +121,11 @@ def test_rich_formatting_canonicalizes_overlapping_styles_and_multiline_quotes()
             },
             {
                 "type": "blockquote",
-                "runs": [{"text": "Line 1", "italic": True, "color": "orange"}],
+                "runs": [{"text": "Line 1", "italic": True, "color": "green"}],
             },
             {
                 "type": "blockquote",
-                "runs": [{"text": "Line 2", "italic": True, "color": "orange"}],
+                "runs": [{"text": "Line 2", "italic": True, "color": "green"}],
             },
         ],
     }
@@ -193,6 +193,8 @@ def test_rich_formatting_enforces_5000_unicode_code_point_limit() -> None:
         {"version": 1, "blocks": [], "extra": True},
         {"version": 1, "blocks": [{"type": "script", "runs": [{"text": "alert(1)"}]}]},
         {"version": 1, "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "color": "yellow"}]}]},
+        {"version": 1, "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "color": "orange"}]}]},
+        {"version": 1, "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "color": "pink"}]}]},
         {"version": 1, "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "bold": "yes"}]}]},
         {"version": 1, "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "href": "javascript:alert(1)"}]}]},
     ],

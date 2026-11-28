@@ -17,9 +17,7 @@ PALETTE_COLORS: dict[str, str] = {
     "black": "#172033",
     "green": "#066e42",
     "red": "#b42318",
-    "orange": "#9a4600",
     "blue": "#175cd3",
-    "pink": "#a51863",
 }
 
 BLOCK_TYPES = ("paragraph", "blockquote")

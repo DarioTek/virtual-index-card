@@ -5,7 +5,7 @@ const selectedDeckId =
 const deckQuery = selectedDeckId ? `?deck_id=${encodeURIComponent(selectedDeckId)}` : '';
 
 const MAX_VISIBLE_CHARS = 5000;
-const PALETTE_COLORS = new Set(['black', 'green', 'red', 'orange', 'blue', 'pink']);
+const PALETTE_COLORS = new Set(['black', 'green', 'red', 'blue']);
 const richFieldControllers = new WeakMap();
 
 async function apiRequest(path, options = {}) {
