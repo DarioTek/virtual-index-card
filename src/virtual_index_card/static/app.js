@@ -436,16 +436,12 @@ function inspectSelectionFormats(doc, sel, pendingStyles) {
     bold: false,
     italic: false,
     underline: false,
-    blockquote: false,
     color: null,
   };
   if (!sel || doc.blocks.length === 0) return active;
 
   const startB = Math.min(sel.startBlock, doc.blocks.length - 1);
   const endB = Math.min(sel.endBlock, doc.blocks.length - 1);
-  active.blockquote = doc.blocks
-    .slice(startB, endB + 1)
-    .every((block) => block.type === 'blockquote');
 
   if (startB === endB && sel.startOffset === sel.endOffset) {
     const styles = pendingStyles || getCaretStyles(doc, startB, sel.startOffset);
@@ -618,18 +614,6 @@ function hydrateRichField(fieldEl) {
     const next = cloneDoc(currentDoc);
     const startB = Math.min(sel.startBlock, next.blocks.length - 1);
     const endB = Math.min(sel.endBlock, next.blocks.length - 1);
-
-    if (command === 'blockquote') {
-      const allQuoted = next.blocks
-        .slice(startB, endB + 1)
-        .every((block) => block.type === 'blockquote');
-      const targetType = allQuoted ? 'paragraph' : 'blockquote';
-      for (let b = startB; b <= endB; b += 1) {
-        next.blocks[b].type = targetType;
-      }
-      commitDoc(next, sel, restoreFocus);
-      return;
-    }
 
     const isCollapsed = startB === endB && sel.startOffset === sel.endOffset;
     if (isCollapsed) {

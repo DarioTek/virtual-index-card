@@ -589,8 +589,10 @@ def test_formatting_toolbar_accessibility_attributes_present(client: TestClient)
     assert page.text.count('role="toolbar"') == 4
     assert 'aria-label="Front formatting"' in page.text
     assert 'aria-label="Back formatting"' in page.text
-    for label in ("Bold", "Italic", "Underline", "Block quote"):
+    for label in ("Bold", "Italic", "Underline"):
         assert f'aria-label="{label}"' in page.text
+    assert 'data-command="blockquote"' not in page.text
+    assert 'aria-label="Block quote"' not in page.text
     for color in ("Black", "Green", "Red", "Orange", "Blue", "Pink"):
         assert f'aria-label="Text color: {color}"' in page.text
 

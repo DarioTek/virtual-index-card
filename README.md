@@ -14,7 +14,7 @@ All durable data â€” accounts, sessions, decks, cards, and per-deck card order â
 - Multiple private decks per account with sequential defaults or unique custom names; owners can rename decks and permanently delete empty non-last decks, while users cannot see or modify another account's decks or cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
-- Rich-text card formatting on both front and back with keyboard-accessible toolbar controls for **bold**, **italic**, **underline**, **block quotes**, and a fixed WCAG AA 6-color palette (`black`, `green`, `red`, `orange`, `blue`, `pink`), supporting overlapping styles, a 5,000 visible Unicode code-point limit per side, safe server-side canonicalization/escaping, and verbatim preservation of plain-text cards.
+- Rich-text card formatting on both front and back with keyboard-accessible toolbar controls for **bold**, **italic**, **underline**, and a fixed WCAG AA 6-color palette (`black`, `green`, `red`, `orange`, `blue`, `pink`), supporting overlapping styles, a 5,000 visible Unicode code-point limit per side, safe server-side canonicalization/escaping, and verbatim preservation of plain-text cards.
 - CSRF-protected writes and hashed passwords/session tokens.
 
 ## Prerequisites
