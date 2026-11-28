@@ -136,6 +136,71 @@ Approved: apply the proposed changes for issues #<list> only. Use `gh issue edit
 
 ---
 
+## 5. Audit and sync documentation
+
+Audits all repository documentation against the actual code and configuration, and drafts updates. Nothing changes until you approve.
+
+```markdown
+Read AGENTS.md and PROJECT_GUIDELINES.md (if present), and follow them as your operating instructions for this session.
+
+Task: audit all documentation in this repository against the actual code and configuration, and propose updates so nothing is outdated. Do not modify any files until I approve.
+
+## Step 1: Inventory
+List every documentation file and what it covers. Include at least: README.md, AGENTS.md, PLAN.md, AGENT_PROMPT.md, PROJECT_GUIDELINES.md, CONTRIBUTING.md, CHANGELOG.md, everything under docs/, any other *.md files, .env.example and sample configs, CI/workflow documentation, API specs, diagrams, and docstrings or comments that describe behavior. Also check Git history and recent commits or merged PRs for changes the docs may not reflect.
+
+## Step 2: Verify each document against the source of truth
+The code, configuration, and actual repository state are the source of truth. Check claims such as:
+- File paths, folder structure, module/class/function names
+- Setup, install, build, run, and test commands (run the safe ones and record actual results)
+- Dependencies, versions, runtime requirements
+- Environment variables, config options, CLI flags
+- Architecture, components, data flow, integrations (docs/architecture.md, docs/technical-decisions.md)
+- API endpoints, request/response shapes
+- Links, cross-references, and anchors (internal and external)
+- PLAN.md: tasks marked Completed or In Progress against real repository state, stale "Next Recommended Action," and drafted "Proposed Issues" that already exist in GitHub
+- AGENT_PROMPT.md: every procedure name and file it references still exists and matches AGENTS.md
+- AGENTS.md: instructions still match how the project actually works
+- Open GitHub Issues (via `gh`, if available) whose status or scope conflicts with what the docs say
+
+## Step 3: Classify every finding
+- **Outdated:** was true, no longer is
+- **Incorrect:** never matched the code
+- **Missing:** exists in code but is undocumented
+- **Contradictory or duplicated:** the same topic described differently in multiple places
+- **Dead reference:** broken link, removed file, or removed feature
+- **Unverifiable:** cannot be confirmed from the repository (list it as an open question; do not guess)
+
+## Step 4: Report (no changes yet)
+Present:
+1. A summary table: document, status (Current / Needs Update / Obsolete), and the number and type of issues.
+2. For each issue: the file and location, what the doc says, what the code actually shows (with evidence such as a file path or command output), and the proposed fix.
+3. Proposed new documents for undocumented areas, and proposed removals or merges for obsolete or duplicate ones.
+4. Suggestions to prevent future drift (for example, a docs checklist item in the Definition of Done, link checking in CI, or generating docs from code), as proposals only.
+5. Questions for me where intent is unclear. Ask instead of guessing.
+
+## Constraints
+- Do not edit, create, delete, commit, or push anything until I approve the specific changes.
+- Never change source code to match the docs. If the code looks wrong rather than the docs, flag it and ask me.
+- Do not invent behavior. Mark anything unconfirmed as an open question.
+- Keep each document's existing voice and format, and make the smallest edit that makes it accurate.
+- Do not delete documentation for features that still exist.
+- Preserve any existing user changes.
+```
+
+**Apply the approved updates** (after you review the report):
+
+```markdown
+Approved: apply the proposed documentation changes for <all findings | findings #N-#M | these files only>. Edit documentation files only; do not touch source code. Re-verify each edited claim against the code after editing, and run any documented commands you changed. Update PLAN.md to record what was done. Show me the diff. Do not commit or push until I ask.
+```
+
+**Tips**
+- For a large repo, run it in passes by narrowing Step 1, for example "docs/ only" first, then README and config docs, then inline docstrings.
+- Run it after merging a large feature or before a release, while the changes are still fresh.
+- Consider adding a Definition of Done line to PROJECT_GUIDELINES.md such as "Documentation updated for any behavior, config, or setup change," so drift gets caught at the source.
+
+
+---
+
 ## Optional add-ons
 
 **Authorize the agent to file issues after you approve the drafts** (append to Prompt 1 or 2):
