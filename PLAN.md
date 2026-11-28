@@ -1,112 +1,83 @@
-# Active plan: Complete multiple-deck management (#1)
+# Active plan: Add formatting to flash-card text (#7)
 
 ## Objective
 
-Deliver the full [multiple-deck epic #1](https://github.com/DarioTek/virtual-index-card/issues/1) through its child issues: custom names and rename (#2), safe empty-deck deletion (#3), revocable public read-only links (#4), and versioned JSON import/export (#5). Preserve existing card data, account isolation, and per-deck Review order throughout.
+Implement rich-text formatting for flash-card notes on [GitHub Issue #7](https://github.com/DarioTek/virtual-index-card/issues/7) so card authors can apply, overlap, and remove **bold**, **italic**, **underline**, **block quotes**, and a fixed accessible **6-color palette** (black, green, red, orange, blue, pink) on both front and back faces during card creation and editing. Preserve existing plain-text cards verbatim, enforce the 5,000-visible-character limit per side, prevent XSS/active-content execution, and maintain full account isolation, CSRF protection, keyboard accessibility, and responsive design.
 
-## Confirmed scope and decisions
+## Confirmed scope and proposed design decisions
 
-- #1 is the epic and remains open until #2–#5 are complete, their pull requests are merged, the complete automated suite passes, and documentation is current.
-- The existing schema-v3 multiple-deck implementation is the baseline: new and upgraded accounts receive `My Deck 1`; cards and Review order are deck-scoped.
-- Deck names are trimmed, non-empty, at most 100 characters, and case-insensitively unique per account. Generated `My Deck N` names remain available.
-- Only empty decks may be deleted, and an account must retain at least one deck.
-- Public sharing is anonymous, unlisted, read-only, revocable, and valid until revoked or rotated. Public users cannot persist shuffle or any other mutation.
-- Import/export uses versioned full-fidelity JSON. Import creates a new deck, never overwrites, is atomic, and observes documented configurable byte/card limits.
-- A complete passing automated suite is sufficient; manual browser testing is not a closure requirement.
-- `PROJECT_GUIDELINES.md` is not present. The Definition of Done is the completion checklist in `AGENTS.md` plus the issue acceptance criteria.
+### In scope (#7)
+- Visual formatting toolbar controls for **bold**, **italic**, **underline**, **block quote**, and **text color** (`black`, `green`, `red`, `orange`, `blue`, `pink`) on both **Front** and **Back** in the card-creation form and inline card-edit forms (`deck.html`).
+- Overlapping inline styles (e.g., bold + italic + underline + color) and inline styles combined with block quotes, preserved across save, edit reopen, and reload.
+- Consistent formatted rendering in **Deck Management** (`/`), **Edit** pre-population, and **Review** (`/review`) without changing card ordering or Review shuffle order.
+- Strict server-side sanitization/canonicalization and visible-character limit validation (5,000 max per side, 5,001 rejected regardless of formatting markup).
+- Safe preservation of existing plain-text cards without interpreting `<`, `>`, `&`, or markup-like strings as HTML.
+- Keyboard-operable formatting controls with accessible names (`aria-label`, `aria-pressed`, toolbar semantics) and WCAG AA (>= 4.5:1) color contrast against both front (`#fffefa`) and back (`#edf8f6`) card backgrounds.
+- Additive SQLite schema migration (`v3 -> v4`) and documentation updates (`README.md`, `docs/architecture.md`, `docs/technical-decisions.md`).
+
+### Out of scope
+- Images, links, tables, font family/size selection, headings, lists, and arbitrary custom colors.
+- Implementing public sharing (#4) or JSON import/export (#5) themselves (tracked separately; #7 only ensures a compatible shared renderer and storage model).
+
+### Proposed resolutions for Issue #7 open questions (pending approval)
+1. **Storage & API compatibility (additive schema v4):**
+   - Keep `cards.front` and `cards.back` as plain visible text (`TEXT NOT NULL`) and add nullable `front_rich` and `back_rich` (`TEXT`) columns storing a canonical JSON rich-text AST (list of `{type: "paragraph" | "blockquote", runs: [{text, bold?, italic?, underline?, color?}]}`).
+   - Existing plain-text cards keep `front_rich = NULL` / `back_rich = NULL` and render strictly via Jinja auto-escaping, guaranteeing markup-like plain text (`<script>alert(1)</script>`, `2 < 3`) is never interpreted as markup.
+   - `POST /api/cards` and `PATCH /api/cards/{id}` remain backwards-compatible for `{front, back}` plain-text callers while accepting optional `front_rich` / `back_rich` (or sanitized canonical rich payload). The server never trusts raw client HTML: it validates/canonicalizes the structured document on an allowlist, derives trimmed plain visible text, and rejects empty or >5,000-character sides.
+   - Rendering runs through a single safe helper/Jinja macro using semantic phrasing elements and CSS classes (`strong`, `em`, `u`, `span.fmt-block`, `span.fmt-quote`, `span.fmt-color-*` — valid inside `<button class="flip-button">` without inline `style` attributes), so future public sharing (#4) will automatically render formatting identically in read-only mode.
+2. **Multi-line block quotes:**
+   - Treat block quote as a **block-level** toggle affecting every paragraph/line intersecting the selection. If all selected blocks are already block quotes, toggling unwraps them to normal paragraphs; otherwise all selected blocks become block quotes. Consecutive quoted lines preserve line breaks and support overlapping inline styles inside the quote.
+3. **Visible-character counting convention:**
+   - Count **Unicode code points** (`len(str)` in Python, `Array.from(str).length` in JavaScript), with leading/trailing whitespace trimmed and `\n` between blocks counting as 1 character — matching existing `MAX_NOTE_LENGTH = 5000` in `domain.py`.
+4. **Accessible 6-color palette (WCAG AA >= 4.5:1 on both `#fffefa` and `#edf8f6`):**
+   - `black` (`#172033`), `green` (`#066e42`), `red` (`#b42318`), `orange` (`#9a4600`), `blue` (`#175cd3`), `pink` (`#a51863`).
+5. **Compatibility with JSON import/export (#5):**
+   - Recommend documenting that #5 should include optional `front_rich` / `back_rich` fields in its versioned JSON schema alongside plain `front` / `back` so exported formatted decks round-trip with full fidelity.
 
 ## Delivery order and tasks
 
 | # | Task | Related issue | Likely components | Status |
 |---|---|---|---|---|
-| 1 | Re-establish a test-capable environment and verify the existing multi-deck baseline | #1 | dependency environment, complete test suite | Completed |
-| 2 | Add validated custom deck creation and account-scoped rename, including concurrency-safe uniqueness | #2 | `domain.py`, `repository.py`, `app.py`, deck template, tests | Completed |
-| UI | Modernize the shared responsive layout, navigation, forms, cards, review view, and admin tables for desktop and mobile | User request | templates, `static/styles.css`, responsive regression checks | Completed |
-| 3 | Add transactional empty-deck deletion with last-deck protection and confirmation UI | #3 | `repository.py`, `app.py`, deck template, tests | Completed |
-| 4 | Design and migrate storage for hashed public-share tokens; add owner controls and anonymous read-only Review | #4 | `db.py`, `security.py`, `repository.py`, `app.py`, templates, tests | Not Started |
-| 5 | Define the versioned JSON format and configurable limits; add transactional export/import | #5 | `config.py`, `domain.py`, `repository.py`, `app.py`, templates, tests, docs | Not Started |
-| 6 | Run full regression/security/migration validation and reconcile all documentation | #1–#5 | tests, README, architecture, technical decisions | Not Started |
-| 7 | Review the final diff and prepare issue-linked commit/pull-request reporting | #1–#5 | repository and GitHub metadata | Not Started |
-
-Each child issue will be implemented as a focused logical unit in dependency order. Status will be updated before and after each unit.
+| 1 | Approve design decisions for storage, multi-line block quotes, code-point counting, and palette shades | #7 | `PLAN.md`, `docs/technical-decisions.md` | Completed |
+| 2 | Restore test-capable Python environment (`uv` / `.venv`) and verify baseline tests pass | #7 | local `.venv` (untracked) | Completed |
+| 3 | Design and implement rich-text domain model, canonicalization/sanitization, Unicode code-point visible-length validation, and safe HTML rendering | #7 | `src/virtual_index_card/domain.py`, `src/virtual_index_card/formatting.py` | Completed |
+| 4 | Add additive SQLite schema v4 migration (`front_rich`, `back_rich`) and update repository queries while preserving plain-text cards | #7 | `src/virtual_index_card/db.py`, `src/virtual_index_card/repository.py` | Completed |
+| 5 | Update card API (`POST /api/cards`, `PATCH /api/cards/{id}`) and templates (`deck.html`, `review.html`, shared card-face partial/macro) with backwards compatibility | #7 | `src/virtual_index_card/app.py`, `src/virtual_index_card/templates/` | Completed |
+| 6 | Build accessible rich-text editor toolbar and selection/formatting logic in JS + responsive CSS styles for toolbar, overlapping marks, block quotes, and accessible color palette | #7 | `src/virtual_index_card/static/app.js`, `src/virtual_index_card/static/styles.css`, `src/virtual_index_card/templates/deck.html` | Completed |
+| 7 | Add comprehensive unit, migration, API, security/XSS, accessibility/contrast, and UI-integration tests | #7 | `tests/test_domain.py`, `tests/test_repository.py`, `tests/test_app.py`, `tests/test_admin.py` | Completed |
+| 8 | Run full test suite, Python compile check, JS syntax check, contrast verification, and `git diff --check`; update `README.md`, `docs/architecture.md`, `docs/technical-decisions.md`, and `PLAN.md` | #7 | `README.md`, `docs/*.md`, `PLAN.md` | Completed |
 
 ## Acceptance criteria
 
-### Existing core and migration
-
-- [x] New accounts start with exactly one empty `My Deck 1`; generated names remain sequential per account.
-- [x] CRUD, Review, and persisted shuffle are isolated to the selected deck.
-- [x] Invalid or foreign deck IDs fail without disclosing another account's data.
-- [x] Existing schema-v2 migration preserves card IDs, ownership, content, timestamps, and Review positions.
-
-### #2 — custom names and rename
-
-- [x] Valid custom names can be supplied during creation and existing owned decks can be renamed.
-- [x] Names are trimmed, 1–100 characters, and unique per account case-insensitively; the database constraint is authoritative for conflicting writes.
-- [x] Rename preserves cards, timestamps, and Review order; foreign deck IDs fail safely.
-
-### Responsive visual refresh
-
-- [x] Shared header, navigation, page spacing, typography, buttons, and forms use a cohesive professional design system.
-- [x] Deck management, card grids, Review, authentication, and administration layouts adapt at desktop, tablet, and phone breakpoints without requiring application JavaScript.
-- [x] Mobile controls remain touch-friendly; navigation and wide admin tables remain reachable without page-level horizontal overflow.
-- [x] Keyboard focus, skip navigation, reduced-motion behavior, contrast-aware status treatments, and existing semantic labels are preserved or improved.
-
-### #3 — empty-deck deletion
-
-- [x] An owner can delete an empty non-last deck after confirmation.
-- [x] Non-empty, last, foreign, and nonexistent deck deletion attempts are rejected transactionally.
-- [ ] Any associated public link is invalid after eligible deletion. (Integration is deferred to #4 because share records do not exist yet; TD-014 requires `ON DELETE CASCADE`.)
-
-### #4 — public read-only sharing
-
-- [ ] Owners can generate, rotate, and revoke unlisted links backed by unguessable tokens not stored in plaintext where avoidable.
-- [ ] Anonymous viewers can view, navigate, and flip only the shared deck without persisting changes.
-- [ ] Invalid/revoked links and all mutation attempts fail safely without account or deck information leakage.
-
-### #5 — JSON import/export
-
-- [ ] Owned decks export to documented, versioned JSON without credentials, internal ownership IDs, sessions, or sharing tokens.
-- [ ] Import creates a new uniquely named deck and round-trips card text and Review order.
-- [ ] Malformed, incompatible, invalid, collision-prone, or over-limit imports fail atomically.
-- [ ] Upload-byte and card-count limits are configurable and documented with defaults.
-
-### Definition of Done
-
-- [ ] Focused unit/integration/security/migration tests cover success, boundary, ownership, and error paths. (#2 and #3 coverage complete; #4–#5 pending.)
-- [ ] `uv run pytest -q`, JavaScript syntax validation, Python compilation, and `git diff --check` pass.
-- [ ] README, architecture, technical decisions, configuration, and operator guidance describe the as-built behavior.
-- [ ] No unrelated changes, generated artifacts, secrets, or database files are included.
-- [ ] Child work is linked to issues/PRs as authorized; #1 is not closed before all child PRs merge.
+- [x] On both front and back, a user can apply and remove **bold**, **italic**, **underline**, **block-quote** styling, and any of the six palette colors (**black, green, red, orange, blue, pink**) during card creation and editing.
+- [x] Overlapping inline styles and block-quote + inline combinations remain applied to the intended text after saving, reopening for editing, and reloading.
+- [x] Formatting displays consistently in **Deck Management** and **Review** views without changing card creation order or Review shuffle order.
+- [ ] Shared card-face rendering uses the sanitized canonical representation so future public sharing (#4) displays saved formatting in read-only mode without granting edit access. *(Shared macro `card_faces` and `render_card_face` are implemented and verified in Management and Review; end-to-end public-view verification awaits #4 implementation.)*
+- [x] A side with **5,000** visible Unicode code points is accepted; one with **5,001** is rejected, regardless of formatting complexity; empty/whitespace-only formatted content is rejected.
+- [x] Existing plain-text cards (including v3 databases migrated to v4) retain their exact text; markup-like strings (`<b>`, `<script>`, etc.) and hostile inputs never execute.
+- [x] Formatting controls are keyboard-operable (`Tab`, arrow keys within toolbar, `Enter`/`Space`, `Ctrl/Cmd+B/I/U` shortcuts) with accessible names (`aria-label`/`aria-pressed`), and all six palette colors meet WCAG AA (>= 4.5:1) contrast on both card face backgrounds.
+- [x] Account isolation, deck ownership checks, and CSRF protections remain intact for all card endpoints.
+- [x] Complete automated test suite (`uv run pytest -q`: 90 passed), `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check` pass, and `README.md`, `docs/architecture.md`, and `docs/technical-decisions.md` accurately describe the delivered behavior.
 
 ## Validation strategy
 
-1. Establish the baseline with `uv sync --group dev` and `uv run pytest -q` before feature changes.
-2. For each child issue, add repository/domain tests first where practical, then HTTP integration and authorization/error-path coverage.
-3. Re-run focused tests during implementation and the complete suite at every child milestone.
-4. Validate schema upgrades with representative old databases and verify transactional rollback for destructive/import operations.
-5. Run `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, and `git diff --check` before completion.
-6. Inspect the final diff and Git status for unrelated or sensitive files.
+1. **Domain & sanitization unit tests:** Verify AST parsing/canonicalization, overlapping marks, multi-line block quotes, Unicode code-point visible length boundaries (`5000` accepted, `5001` rejected, empty/whitespace rejected, emoji/multi-byte counting), hostile/unsupported tags/attributes stripped or rejected, and deterministic safe rendering.
+2. **Database & migration tests:** Verify fresh schema v4 creation, v1/v2/v3 -> v4 migrations preserving existing plain-text cards (`front_rich IS NULL`, `back_rich IS NULL`) and card IDs/positions/ownership, and `PRAGMA foreign_key_check`.
+3. **API, security & isolation tests:** Verify creating/editing cards with plain text and rich formatting on both sides, backwards compatibility with `{front, back}`, rejection of hostile payloads (`<script>`, `onerror=`, `javascript:`, disallowed colors/tags), 422 on 5,001 visible chars, 403 without CSRF, and 404 across accounts/decks.
+4. **Template, accessibility & contrast checks:** Verify rendered management, edit, and review HTML contains expected accessible toolbar attributes (`role="toolbar"`, `aria-label`, `aria-pressed`), palette class rendering, plain-text literal escaping, and mathematical WCAG AA (>= 4.5:1) contrast ratio checks for all 6 palette shades against card front and back backgrounds.
+5. **JS & static checks:** Run `node --check src/virtual_index_card/static/app.js`, `python -m compileall -q src tests`, `uv run pytest -q`, and `git diff --check`. Also exercise the rich-text editor in a headless/live check if available, or document any browser-only interaction checks not automated.
 
 ## Dependencies and risks
 
-- #2 should precede #5 because imported names use the same validation and uniqueness rules.
-- #3 must integrate with #4 so deletion invalidates public access.
-- #4 requires a schema migration and expands the unauthenticated attack surface; token storage, cache behavior, and non-disclosure need security-focused review.
-- #5 processes untrusted input; byte/card limits, schema validation, and an all-or-nothing transaction are required.
-- SQLite write concurrency may expose naming or last-deck race conditions; database constraints and transactional checks must be authoritative.
-- Existing installations are durable-data systems. Every schema migration must preserve data and fail loudly on unsupported versions.
-
-## Open questions
-
-- None currently blocking. Defaults for configurable import limits and the exact JSON schema version will be selected during #5, documented, and covered by tests.
+- **Browser `contenteditable` inconsistencies:** Native `document.execCommand` behaves differently across browsers for overlapping tags, color spans, and block quotes. Mitigation: build explicit DOM/Range normalization and canonical JSON AST serialization in `app.js` so the editor produces clean, predictable formatting and survives save/edit round-trips reliably.
+- **HTML validity inside `<button class="flip-button">`:** Flow elements (`<p>`, `<blockquote>`) are invalid inside `<button>`. Mitigation: render block containers as `<span class="fmt-block">` / `<span class="fmt-quote">` (`display: block`) with phrasing tags (`<strong>`, `<em>`, `<u>`, `<span class="fmt-color-*">`) so HTML5 remains valid and existing flip interaction/CSS stay intact.
+- **XSS / injection risk:** Rich text increases attack surface. Mitigation: never store or render untrusted client HTML; parse/validate strictly on an allowlist into a typed JSON AST and render exclusively through escaped template/helper output with CSS classes (no inline `style` attributes).
+- **Schema migration safety:** Existing installations hold durable SQLite data. Mitigation: additive `ALTER TABLE cards ADD COLUMN ...` migration from v3 to v4 inside `BEGIN IMMEDIATE` transaction, covered by automated migration tests.
+- **Coordination with #4 and #5:** #4 (public sharing) and #5 (JSON import/export) remain open; keeping a shared card-face rendering macro and nullable `*_rich` columns ensures clean forward compatibility.
 
 ## Progress log
 
-- 2026-11-27: Original multiple-deck creation/selection, schema-v3 migration, deck-scoped CRUD/Review/shuffle, and supporting documentation were implemented on the baseline commit. A selected-deck card-creation regression was fixed. Full pytest had not been run in that earlier environment.
-- 2026-11-27: #1 was expanded and groomed as an epic. Child issues #2–#5, repository-wide priority labels, and the `Multiple Deck Support` milestone were created.
-- 2026-11-27: User authorized starting #1. Re-read the live epic and child issues, confirmed a clean branch, replaced the obsolete plan with this dependency-ordered delivery plan, and began restoring baseline test validation.
-- 2026-11-27: System Python correctly rejected a user-level `pip install uv` under PEP 668. Installed `uv` in an isolated `/tmp` bootstrap environment, synchronized the committed development environment, and ran the baseline suite. The first run found one stale empty-Review copy assertion (67 passed, 1 failed); updated it to the implemented deck-specific message.
-- 2026-11-27: Completed #2 implementation: shared 100-character name validation, optional custom creation, sequential generation beyond existing numeric names, account-scoped rename, database-backed case-insensitive uniqueness errors, form UI, ownership/CSRF handling, tests, and documentation. Focused tests passed (29); the complete suite passed (72) with one existing Starlette/httpx deprecation warning. Python compilation, JavaScript syntax validation, and `git diff --check` also passed. Next: implement transactional empty-deck deletion for #3.
-- 2026-11-27: Completed the user-requested responsive visual refresh. Added a cohesive color/type/spacing system, sticky translucent header, compact brand treatment, responsive navigation, polished panels/forms/cards/Review/admin states, touch-sized mobile controls, table overflow handling, skip navigation, and reduced-motion support. Verified served login/CSS assets through the live preview, including responsive breakpoints. The complete suite passed (72) with the existing deprecation warning; Python compilation, JavaScript syntax validation, and `git diff --check` passed.
-- 2026-11-27: Completed #3's available implementation. Added a CSRF-protected confirmed delete action, disabled-state guidance, and a single conditional SQL delete that atomically requires ownership, no cards, and more than one owned deck. Stale-page, non-empty, last-deck, foreign-ID, missing-CSRF, first-listed deletion, and successful deletion paths are covered. Updated README, architecture, and TD-014. Focused tests passed (26); the complete suite passed (74) with the existing deprecation warning. Public-link cleanup remains explicitly deferred to #4, whose share-table foreign key must cascade on deck deletion.
+- 2026-11-27: Read `AGENTS.md`, `PLAN.md`, `README.md`, `docs/architecture.md`, `docs/technical-decisions.md`, source modules, templates, static JS/CSS, and existing tests. Inspected GitHub Issue #7 and repository state on branch `arena/d38a9b9c-virtual-index-card` (clean working tree at `732bbee`). Updated `PLAN.md` with the Issue #7 plan and open design questions for user approval.
+- 2026-11-27: User approved the plan and proposed resolutions. Bootstrapped `uv` in `/tmp/uv-env`, ran `uv sync --group dev`, and verified the baseline suite (74 passed).
+- 2026-11-27: Implemented `formatting.py` (allowlisted rich-text AST canonicalization, Unicode code-point visible length validation, WCAG AA 6-color palette, and MarkupSafe rendering), updated `domain.py`, added schema v4 (`front_rich`, `back_rich`) and `v3 -> v4` migration in `db.py` and `repository.py`, updated `app.py` and templates (`_card_components.html`, `base.html`, `deck.html`, `review.html`), and built the accessible rich-text editor toolbar and styling in `static/app.js` and `static/styles.css`.
+- 2026-11-27: Added unit, contrast, repository, migration, API/XSS/isolation, and toolbar accessibility tests. Updated `README.md`, `docs/architecture.md`, and `docs/technical-decisions.md` (`TD-015`). Verified `uv run pytest -q` (90 passed, 1 existing Starlette/httpx deprecation warning), `python -m compileall -q src tests`, `node --check src/virtual_index_card/static/app.js`, pure JS formatting logic checks via Node, and `git diff --check`. Live browser DOM `contenteditable` typing/selection behavior was not run in a headless browser (no Chromium/Playwright installed in sandbox). Next step: review diff and commit/PR as requested.

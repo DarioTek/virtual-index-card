@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_card_components.html" import card_faces %}
 {% block title %}Review {{ deck['name'] }} · Virtual Index Cards{% endblock %}
 {% block content %}
 <section class="review-header">
@@ -32,10 +33,7 @@
   <article class="card review-card" data-card-id="{{ card.id }}">
     <button type="button" class="flip-button" aria-pressed="false"
             aria-label="Flip card to see the back">
-      <span class="card-inner">
-        <span class="card-face card-front">{{ card.front }}</span>
-        <span class="card-face card-back">{{ card.back }}</span>
-      </span>
+      {{ card_faces(card) }}
     </button>
     <p class="flip-hint">Tap the card to flip it.</p>
   </article>
@@ -53,5 +51,5 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', path='/app.js') }}?v=deck-context-1" defer></script>
+<script src="{{ url_for('static', path='/app.js') }}?v=formatting-1" defer></script>
 {% endblock %}

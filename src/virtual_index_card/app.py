@@ -5,7 +5,7 @@ import time
 from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
-from typing import Annotated, Iterator
+from typing import Annotated, Any, Iterator
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,13 +20,14 @@ from .config import Settings, load_settings
 from .db import connect, initialize
 from .domain import (
     ValidationError,
+    clean_card_side,
     clean_deck_name,
-    clean_note,
     shuffled_cards,
     utc_now,
     validate_password,
     validate_username,
 )
+from .formatting import PALETTE_COLORS, render_card_face
 from .security import (
     generate_temporary_password,
     hash_password,
@@ -45,8 +46,10 @@ logger = logging.getLogger(__name__)
 
 
 class CardInput(BaseModel):
-    front: str
-    back: str
+    front: str = ""
+    back: str = ""
+    front_rich: dict[str, Any] | None = None
+    back_rich: dict[str, Any] | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +73,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Virtual Index Cards", version="0.2.0")
     app.state.settings = settings
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
+    templates.env.globals["render_card_face"] = render_card_face
+    templates.env.globals["palette_colors"] = PALETTE_COLORS
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
 
     def get_connection(request: Request) -> Iterator[Connection]:
@@ -138,9 +143,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         set_auth_cookies(response, session_token, csrf_token)
 
-    def validated_note_pair(payload: CardInput) -> tuple[str, str]:
+    def validated_note_pair(
+        payload: CardInput,
+    ) -> tuple[tuple[str, dict[str, Any] | None], tuple[str, dict[str, Any] | None]]:
         try:
-            return clean_note(payload.front, "Front"), clean_note(payload.back, "Back")
+            return (
+                clean_card_side(payload.front, payload.front_rich, "Front"),
+                clean_card_side(payload.back, payload.back_rich, "Back"),
+            )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -730,11 +740,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         deck_id: int | None = None,
     ) -> dict:
         require_csrf(request)
-        front, back = validated_note_pair(payload)
+        (front, front_rich), (back, back_rich) = validated_note_pair(payload)
         deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
             card = repo.create_card(
-                connection, int(user["id"]), front, back, utc_now(), int(deck["id"])
+                connection,
+                int(user["id"]),
+                front,
+                back,
+                utc_now(),
+                int(deck["id"]),
+                front_rich=front_rich,
+                back_rich=back_rich,
             )
         return {"card": asdict(card)}
 
@@ -748,11 +765,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         deck_id: int | None = None,
     ) -> dict:
         require_csrf(request)
-        front, back = validated_note_pair(payload)
+        (front, front_rich), (back, back_rich) = validated_note_pair(payload)
         deck = require_selected_deck(connection, int(user["id"]), deck_id)
         with connection:
             card = repo.update_card(
-                connection, int(user["id"]), card_id, front, back, utc_now(), int(deck["id"])
+                connection,
+                int(user["id"]),
+                card_id,
+                front,
+                back,
+                utc_now(),
+                int(deck["id"]),
+                front_rich=front_rich,
+                back_rich=back_rich,
             )
         if card is None:
             raise HTTPException(status_code=404, detail="Card not found.")

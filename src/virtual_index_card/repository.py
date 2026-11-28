@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
 from .domain import Card
+from .formatting import deserialize_rich_document, serialize_rich_document
 from .security import hash_token  # noqa: F401  (kept for API symmetry in tests)
 
 
@@ -36,6 +37,8 @@ def _to_card(row: sqlite3.Row) -> Card:
         position=row["position"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        front_rich=deserialize_rich_document(row["front_rich"]),
+        back_rich=deserialize_rich_document(row["back_rich"]),
     )
 
 
@@ -411,6 +414,9 @@ def create_card(
     back: str,
     created_at: str,
     deck_id: int | None = None,
+    *,
+    front_rich: dict[str, Any] | None = None,
+    back_rich: dict[str, Any] | None = None,
 ) -> Card:
     deck = get_deck(connection, user_id, deck_id)
     if deck is None:
@@ -422,9 +428,20 @@ def create_card(
     )
     position = int(cursor.fetchone()["next_position"])
     insert = connection.execute(
-        "INSERT INTO cards (user_id, deck_id, front, back, position, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (user_id, deck["id"], front, back, position, created_at, created_at),
+        "INSERT INTO cards "
+        "(user_id, deck_id, front, back, front_rich, back_rich, position, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            user_id,
+            deck["id"],
+            front,
+            back,
+            serialize_rich_document(front_rich),
+            serialize_rich_document(back_rich),
+            position,
+            created_at,
+            created_at,
+        ),
     )
     card = get_card(connection, user_id, int(insert.lastrowid), int(deck["id"]))
     assert card is not None
@@ -439,14 +456,26 @@ def update_card(
     back: str,
     updated_at: str,
     deck_id: int | None = None,
+    *,
+    front_rich: dict[str, Any] | None = None,
+    back_rich: dict[str, Any] | None = None,
 ) -> Card | None:
     deck = get_deck(connection, user_id, deck_id)
     if deck is None:
         return None
     cursor = connection.execute(
-        "UPDATE cards SET front = ?, back = ?, updated_at = ? "
+        "UPDATE cards SET front = ?, back = ?, front_rich = ?, back_rich = ?, updated_at = ? "
         "WHERE user_id = ? AND deck_id = ? AND id = ?",
-        (front, back, updated_at, user_id, deck["id"], card_id),
+        (
+            front,
+            back,
+            serialize_rich_document(front_rich),
+            serialize_rich_document(back_rich),
+            updated_at,
+            user_id,
+            deck["id"],
+            card_id,
+        ),
     )
     if cursor.rowcount == 0:
         return None
