@@ -26,6 +26,7 @@ nohup uv run gunicorn virtual_index_card.app:app \
   --workers 2 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:10001 \
+  --pid "$PROJECT_DIR/gunicorn.pid" \
   > "$PROJECT_DIR/logs/virtual_index_card.log" 2>&1 &
 
 echo "Virtual Index Card started in the background via Gunicorn. Check logs at $PROJECT_DIR/logs/virtual_index_card.log"
@@ -34,3 +35,5 @@ echo "End Current timestamp: $(timestamp)"
 # To stop the process, use pgrep to return the PID:
 # pgrep -f "gunicorn.*virtual_index_card.app:app"
 # Then use: kill <PID>
+#
+# kill "$(cat $PROJECT_DIR/gunicorn.pid)"
