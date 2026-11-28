@@ -56,6 +56,54 @@ CREATE TABLE account_requests (
 CREATE INDEX idx_account_requests_status ON account_requests(status, id);
 """
 
+V3_SCHEMA = """
+CREATE TABLE users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    salt          TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+    created_at    TEXT NOT NULL
+);
+CREATE TABLE decks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (user_id, name COLLATE NOCASE),
+    UNIQUE (id, user_id)
+);
+CREATE TABLE sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE cards (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deck_id    INTEGER NOT NULL,
+    front      TEXT NOT NULL,
+    back       TEXT NOT NULL,
+    position   INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (deck_id, user_id) REFERENCES decks(id, user_id) ON DELETE CASCADE
+);
+CREATE TABLE account_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL,
+    contact         TEXT,
+    note            TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at      TEXT NOT NULL,
+    decided_at      TEXT,
+    decided_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+"""
+
 
 def test_request_form_is_shown(client: TestClient) -> None:
     page = client.get("/register")
@@ -498,7 +546,7 @@ def test_migration_from_schema_v1(tmp_path) -> None:
         ).fetchone()[0]
     finally:
         migrated.close()
-    assert version == 3
+    assert version == 4
     assert role == "user"
     assert "account_requests" in tables
     assert migrated_deck == "My Deck 1"
@@ -529,25 +577,75 @@ def test_migration_from_schema_v2_preserves_cards_and_order(tmp_path) -> None:
     initialize(database)
     migrated = sqlite3.connect(database)
     try:
-        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 4
         deck_id, name = migrated.execute(
             "SELECT id, name FROM decks WHERE user_id = 1"
         ).fetchone()
         assert name == "My Deck 1"
         cards = migrated.execute(
-            "SELECT id, deck_id, front, back, position, created_at, updated_at "
+            "SELECT id, deck_id, front, back, front_rich, back_rich, position, created_at, updated_at "
             "FROM cards ORDER BY id"
         ).fetchall()
         assert cards == [
-            (41, deck_id, "front A", "back A", 1, "created A", "updated A"),
-            (77, deck_id, "front B", "back B", 0, "created B", "updated B"),
+            (41, deck_id, "front A", "back A", None, None, 1, "created A", "updated A"),
+            (77, deck_id, "front B", "back B", None, None, 0, "created B", "updated B"),
         ]
         assert migrated.execute("PRAGMA foreign_key_check").fetchall() == []
     finally:
         migrated.close()
 
 
-def test_fresh_databases_use_schema_v3(tmp_path) -> None:
+def test_migration_from_schema_v3_preserves_plain_text_cards(tmp_path) -> None:
+    database = tmp_path / "v3.sqlite3"
+    salt, digest = hash_password("legacy-password-1")
+    connection = sqlite3.connect(database)
+    try:
+        connection.executescript(V3_SCHEMA)
+        connection.execute(
+            "INSERT INTO users (id, username, salt, password_hash, role, created_at) "
+            "VALUES (1, 'legacy', ?, ?, 'user', '2026-11-24T00:00:00+00:00')",
+            (salt, digest),
+        )
+        connection.execute(
+            "INSERT INTO decks (id, user_id, name, created_at) "
+            "VALUES (1, 1, 'My Deck 1', '2026-11-24T00:00:00+00:00')"
+        )
+        connection.execute(
+            "INSERT INTO cards (id, user_id, deck_id, front, back, position, created_at, updated_at) "
+            "VALUES (10, 1, 1, '<b>not bold</b>', '<script>alert(1)</script>', 0, 'c', 'u')"
+        )
+        connection.execute("PRAGMA user_version = 3")
+        connection.commit()
+    finally:
+        connection.close()
+
+    with TestClient(create_app(Settings(database_path=database))) as client:
+        login = client.post(
+            "/login",
+            data={"username": "legacy", "password": "legacy-password-1"},
+            follow_redirects=False,
+        )
+        assert login.status_code == 303
+        page = client.get("/")
+        assert page.status_code == 200
+        assert "<b>not bold</b>" not in page.text
+        assert "<script>alert(1)</script>" not in page.text
+        assert "&lt;b&gt;not bold&lt;/b&gt;" in page.text
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
+
+    migrated = sqlite3.connect(database)
+    try:
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 4
+        row = migrated.execute(
+            "SELECT front, back, front_rich, back_rich FROM cards WHERE id = 10"
+        ).fetchone()
+        assert row == ("<b>not bold</b>", "<script>alert(1)</script>", None, None)
+        assert migrated.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        migrated.close()
+
+
+def test_fresh_databases_use_schema_v4(tmp_path) -> None:
     database = tmp_path / "fresh.sqlite3"
     settings = Settings(database_path=database)
     create_app(settings)
@@ -556,7 +654,7 @@ def test_fresh_databases_use_schema_v3(tmp_path) -> None:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
     finally:
         connection.close()
-    assert version == 3
+    assert version == 4
 
 
 def test_unsupported_schema_version_is_rejected(tmp_path) -> None:

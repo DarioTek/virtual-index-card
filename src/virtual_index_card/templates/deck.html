@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_card_components.html" import card_faces, rich_editor_field %}
 {% block title %}{{ deck['name'] }} · Virtual Index Cards{% endblock %}
 {% block content %}
 <section class="deck-header">
@@ -46,12 +47,8 @@
 <section class="editor" aria-labelledby="new-card-heading">
   <h2 id="new-card-heading">Add a card</h2>
   <form id="create-form" class="card-form" data-deck-id="{{ deck['id'] }}">
-    <label for="new-front">Front</label>
-    <textarea id="new-front" name="front" rows="3" maxlength="5000" required
-              placeholder="Question or prompt"></textarea>
-    <label for="new-back">Back</label>
-    <textarea id="new-back" name="back" rows="3" maxlength="5000" required
-              placeholder="Answer or note"></textarea>
+    {{ rich_editor_field("new-front", "front", "Front", placeholder="Question or prompt") }}
+    {{ rich_editor_field("new-back", "back", "Back", placeholder="Answer or note") }}
     <button type="submit">Add card</button>
     <p class="form-error" id="create-error" role="alert" hidden></p>
   </form>
@@ -62,20 +59,19 @@
   <article class="card" data-card-id="{{ card.id }}">
     <button type="button" class="flip-button" aria-pressed="false"
             aria-label="Flip card {{ loop.index }}">
-      <span class="card-inner">
-        <span class="card-face card-front">{{ card.front }}</span>
-        <span class="card-face card-back">{{ card.back }}</span>
-      </span>
+      {{ card_faces(card) }}
     </button>
     <div class="card-actions">
       <button type="button" class="edit-btn secondary small">Edit</button>
       <button type="button" class="delete-btn danger small">Delete</button>
     </div>
     <form class="card-form edit-form" hidden>
-      <label>Front <textarea name="front" rows="3" maxlength="5000" required>{{ card.front }}</textarea></label>
-      <label>Back <textarea name="back" rows="3" maxlength="5000" required>{{ card.back }}</textarea></label>
-      <button type="submit">Save</button>
-      <button type="button" class="cancel-edit secondary">Cancel</button>
+      {{ rich_editor_field("edit-front-" ~ card.id, "front", "Front", initial_text=card.front, rich_doc=card.front_rich) }}
+      {{ rich_editor_field("edit-back-" ~ card.id, "back", "Back", initial_text=card.back, rich_doc=card.back_rich) }}
+      <div class="edit-form-actions">
+        <button type="submit">Save</button>
+        <button type="button" class="cancel-edit secondary">Cancel</button>
+      </div>
       <p class="form-error" role="alert" hidden></p>
     </form>
   </article>
@@ -85,5 +81,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', path='/app.js') }}?v=deck-context-1" defer></script>
+<script src="{{ url_for('static', path='/app.js') }}?v=formatting-1" defer></script>
 {% endblock %}

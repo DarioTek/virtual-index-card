@@ -1,10 +1,10 @@
-# Architecture (as built, 2026-11-24)
+# Architecture (as built, 2026-11-27)
 
 **Status:** Implemented and tested locally. HTTPS deployment and SQLite backups remain backlog work (`BL-022`, `BL-023`). This document describes the code in `src/virtual_index_card/`, not a proposal.
 
 ## Product shape
 
-A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Owners can permanently delete an empty deck after confirmation as long as the account retains at least one deck. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Notes are plain text; each card has a front and back. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
+A hosted FastAPI web application where each account can own multiple private decks. A new account starts with an empty `My Deck 1`; additional decks receive sequential account-local names (`My Deck 2`, and so on) unless the user supplies a custom name. Deck names are trimmed, limited to 100 characters, case-insensitively unique per account, and can be changed without affecting cards or Review order. Owners can permanently delete an empty deck after confirmation as long as the account retains at least one deck. Accounts are created by an **administrator** after approving a visitor's request; the administrator receives the new account's credentials to deliver out of band. Each card has a front and back supporting plain text or structured rich-text formatting (bold, italic, underline, and an accessible 4-color palette of black, green, red, and blue) up to 5,000 visible Unicode code points per side. The management page lists the selected deck's cards newest-created first for CRUD; Review shows one card at a time in that deck's saved order and is the only page offering a shuffle control. Each deck's order is stored independently in SQLite and survives reloads.
 
 ## Components
 
@@ -32,24 +32,25 @@ flowchart TB
 | `admin.py` | `ensure_admin()` used by the CLI and the startup bootstrap |
 | `create_admin.py` | `python -m virtual_index_card.create_admin` CLI (create or promote an admin) |
 | `config.py` | `Settings` from `VIC_DATABASE_PATH`, `VIC_SESSION_TTL_SECONDS`, `VIC_COOKIE_SECURE`, `VIC_ADMIN_USERNAME`, `VIC_ADMIN_PASSWORD` |
-| `db.py` | Connection factory, schema creation, `PRAGMA user_version = 3`, v1 → v2 → v3 and v2 → v3 migrations |
-| `domain.py` | `Card`, note validation, Fisher–Yates shuffle with injectable RNG |
+| `db.py` | Connection factory, schema creation, `PRAGMA user_version = 4`, v1 → v2 → v3 → v4 migrations |
+| `domain.py` | `Card`, note and deck-name validation, Fisher–Yates shuffle with injectable RNG |
+| `formatting.py` | Rich-text AST allowlist validation, visible Unicode code-point checks, and safe HTML rendering |
 | `repository.py` | All SQL; deck and card queries are scoped to the owning `user_id` and selected `deck_id` |
 | `security.py` | PBKDF2 password hashing, random tokens, constant-time comparison |
-| `templates/` | Base layout, login, account-request form, admin queue + credentials page, deck page |
-| `static/` | CSS flip transform and fetch-based UI interactions |
+| `templates/` | Base layout, shared card/editor components, login, account-request form, admin pages, deck, and review pages |
+| `static/` | CSS flip/formatting styles and rich-text editor + fetch-based UI interactions |
 
 ## Data model
 
-SQLite schema version 3 contains:
+SQLite schema version 4 contains:
 
 - `users(id, username UNIQUE NOCASE, salt, password_hash, role, created_at)` — `role` is `admin` or `user` (existing v1 accounts become `user`)
 - `decks(id, user_id, name, created_at)` — account-owned decks with case-insensitive per-account name uniqueness; a composite unique key supports card ownership enforcement
 - `sessions(token_hash PRIMARY KEY, user_id, expires_at, created_at)`
-- `cards(id, user_id, deck_id, front, back, position, created_at, updated_at)` — composite foreign key `(deck_id, user_id)` prevents associating a card with another account's deck
+- `cards(id, user_id, deck_id, front, back, front_rich, back_rich, position, created_at, updated_at)` — composite foreign key `(deck_id, user_id)` prevents associating a card with another account's deck; `front` and `back` hold plain visible text while nullable `front_rich` and `back_rich` hold a canonical JSON formatting document (`NULL` for plain-text cards)
 - `account_requests(id, username, contact, note, status, created_at, decided_at, decided_by, created_user_id)` — `status` is `pending`, `approved`, or `rejected`
 
-Indexes cover session expiry, account/deck card position, and request status. Foreign keys are enabled. No plaintext password or raw session token is stored. Existing v1 databases pass through the v1 → v2 → v3 migrations; existing v2 databases migrate in place by creating `My Deck 1` for each account and moving existing card rows into it while preserving card IDs, content, timestamps, and Review positions. A mismatched `PRAGMA user_version` fails loudly.
+Indexes cover session expiry, account/deck card position, and request status. Foreign keys are enabled. No plaintext password or raw session token is stored. Existing v1–v3 databases migrate in place: v1/v2 databases upgrade through `My Deck 1` creation, and v3 → v4 adds `front_rich` and `back_rich` with `NULL` values so existing plain-text cards keep their exact text, IDs, timestamps, and Review positions without interpreting markup-like characters as HTML. A mismatched `PRAGMA user_version` fails loudly.
 
 ## Interfaces
 
@@ -91,7 +92,7 @@ Indexes cover session expiry, account/deck card position, and request status. Fo
 - Every card operation is scoped to the authenticated `user_id` and validated `deck_id`; cross-account deck/card IDs return 404. The composite database foreign key also prevents mismatched card/deck ownership.
 - Admin-only routes require role `admin` (403 otherwise); the queue decisions are atomic and audited via `decided_by`/`decided_at`.
 - Generated temporary passwords use an unambiguous alphabet and are shown once, never stored; resets sign the user out everywhere.
-- User notes are escaped by Jinja and inserted as text, never `innerHTML`.
+- User notes are never stored or rendered as untrusted HTML: plain-text cards are escaped by Jinja/MarkupSafe, and formatted cards are validated on a strict server allowlist into a canonical JSON AST rendered with CSS classes only (no inline `style` attributes or active elements).
 - Cookies are `SameSite=Lax`; `Secure` is enabled when `VIC_COOKIE_SECURE=true`.
 - Expired sessions are removed when a new session starts.
 - No secrets or database files are committed.
@@ -104,12 +105,12 @@ HTTPS/reverse proxy, production secrets management, and scheduled backups are **
 
 ## Testing
 
-The pytest suite covers domain/shuffle and username/password invariants, password/token helpers, repository isolation, schema migrations, account approval and login, role gating, CSRF, CRUD, newest-first management, persisted Review shuffle, and account separation. Multi-deck coverage verifies sequential names, schema-v2 data migration, selected-deck card/Review isolation, and rejection of foreign deck IDs. Run `uv run pytest -q` to execute the suite.
+The pytest suite covers domain/shuffle, rich-text canonicalization/contrast/sanitization, and username/password invariants, password/token helpers, repository isolation, v1–v4 schema migrations, account approval and login, role gating, CSRF, CRUD, newest-first management, persisted Review shuffle, and account separation. Multi-deck coverage verifies sequential names, schema migration, selected-deck card/Review isolation, and rejection of foreign deck IDs. Run `uv run pytest -q` to execute the suite.
 
 ## Known limitations
 
-- Decks can be created with generated or custom names, selected, renamed, and deleted when empty and not the account's last deck; sharing and import/export are not implemented.
-- Plain text only; Markdown is `BL-004`.
+- Decks can be created with generated or custom names, selected, renamed, and deleted when empty and not the account's last deck; public sharing (#4) and JSON import/export (#5) are not implemented yet.
+- Card formatting is intentionally limited to bold, italic, underline, and the fixed 4-color accessible palette (no block-quote button, orange/pink colors, images, links, tables, lists, headings, or custom fonts).
 - No automatic delivery of credentials — the administrator relays them out of band; mail-based recovery remains `BL-024`.
 - No password reset when the administrator is unreachable; administrators reset passwords from the request queue or with `create_admin`.
 - No HTTPS, backup automation, or CI yet (`BL-022`, `BL-023`, `BL-015`).

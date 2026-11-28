@@ -1,0 +1,35 @@
+{% macro card_faces(card) -%}
+<span class="card-inner">
+  <span class="card-face card-front">{{ render_card_face(card.front, card.front_rich) }}</span>
+  <span class="card-face card-back">{{ render_card_face(card.back, card.back_rich) }}</span>
+</span>
+{%- endmacro %}
+
+{% macro rich_editor_field(field_id, name, label_text, initial_text="", placeholder="", required=True, rich_doc=None) -%}
+<div class="rich-field" data-field-name="{{ name }}">
+  <div class="rich-field-header">
+    <label id="{{ field_id }}-label" for="{{ field_id }}">{{ label_text }}</label>
+    <span class="char-counter muted" id="{{ field_id }}-counter" aria-live="polite">0 / 5,000</span>
+  </div>
+  <div class="fmt-toolbar" role="toolbar" aria-label="{{ label_text }} formatting" aria-controls="{{ field_id }}-editor" hidden>
+    <div class="fmt-group">
+      <button type="button" class="fmt-btn" data-command="bold" aria-pressed="false" aria-label="Bold" title="Bold (Ctrl+B)"><strong>B</strong></button>
+      <button type="button" class="fmt-btn" data-command="italic" aria-pressed="false" aria-label="Italic" title="Italic (Ctrl+I)"><em>I</em></button>
+      <button type="button" class="fmt-btn" data-command="underline" aria-pressed="false" aria-label="Underline" title="Underline (Ctrl+U)"><u>U</u></button>
+    </div>
+    <div class="fmt-group fmt-colors" role="group" aria-label="{{ label_text }} text color">
+      {% for color_name, color_hex in palette_colors.items() %}
+      <button type="button" class="fmt-btn fmt-color-btn" data-color="{{ color_name }}" aria-pressed="false" aria-label="Text color: {{ color_name|capitalize }}" title="{{ color_name|capitalize }}">
+        <span class="color-swatch fmt-swatch-{{ color_name }}" aria-hidden="true"></span>
+        <span class="visually-hidden">{{ color_name|capitalize }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="rich-editor" id="{{ field_id }}-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="{{ field_id }}-label"{% if placeholder %} data-placeholder="{{ placeholder }}"{% endif %} hidden></div>
+  <textarea id="{{ field_id }}" name="{{ name }}" rows="3" maxlength="5000"{% if required %} required{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}>{{ initial_text }}</textarea>
+  {% if rich_doc is not none %}
+  <script type="application/json" class="initial-rich-doc">{{ rich_doc|tojson }}</script>
+  {% endif %}
+</div>
+{%- endmacro %}

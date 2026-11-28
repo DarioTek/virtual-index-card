@@ -197,3 +197,49 @@ def test_replace_positions_persists_new_order(connection: sqlite3.Connection) ->
     )
 
     assert [card.id for card in repo.list_cards(connection, user_id)] == [second.id, first.id]
+
+
+def test_repository_persists_and_clears_rich_formatting_per_card(
+    connection: sqlite3.Connection,
+) -> None:
+    alice = add_user(connection, "alice")
+    bob = add_user(connection, "bob")
+    front_rich = {
+        "version": 1,
+        "blocks": [{"type": "blockquote", "runs": [{"text": "Quoted", "bold": True, "color": "green"}]}],
+    }
+    back_rich = {
+        "version": 1,
+        "blocks": [{"type": "paragraph", "runs": [{"text": "Answer", "italic": True, "underline": True}]}],
+    }
+
+    card = repo.create_card(
+        connection,
+        alice,
+        "Quoted",
+        "Answer",
+        utc_now(),
+        front_rich=front_rich,
+        back_rich=back_rich,
+    )
+    assert card.front_rich == front_rich
+    assert card.back_rich == back_rich
+    assert repo.get_card(connection, bob, card.id) is None
+
+    listed = repo.list_cards(connection, alice)
+    assert listed[0].front_rich == front_rich
+    assert listed[0].back_rich == back_rich
+
+    cleared = repo.update_card(
+        connection,
+        alice,
+        card.id,
+        "Plain now",
+        "Still plain",
+        utc_now(),
+        front_rich=None,
+        back_rich=None,
+    )
+    assert cleared is not None
+    assert cleared.front_rich is None
+    assert cleared.back_rich is None

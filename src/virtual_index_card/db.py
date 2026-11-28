@@ -7,7 +7,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Sequence
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_STATEMENTS: Sequence[str] = (
     """
@@ -47,6 +47,8 @@ SCHEMA_STATEMENTS: Sequence[str] = (
         deck_id    INTEGER NOT NULL,
         front      TEXT NOT NULL,
         back       TEXT NOT NULL,
+        front_rich TEXT,
+        back_rich  TEXT,
         position   INTEGER NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -136,6 +138,11 @@ MIGRATION_2_TO_3: Sequence[str] = (
     "CREATE INDEX idx_cards_deck_position ON cards(deck_id, position)",
 )
 
+MIGRATION_3_TO_4: Sequence[str] = (
+    "ALTER TABLE cards ADD COLUMN front_rich TEXT",
+    "ALTER TABLE cards ADD COLUMN back_rich TEXT",
+)
+
 
 def connect(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
@@ -160,9 +167,17 @@ def initialize(path: Path) -> None:
                     connection.execute(statement)
                 for statement in MIGRATION_2_TO_3:
                     connection.execute(statement)
+                for statement in MIGRATION_3_TO_4:
+                    connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             elif version == 2:
                 for statement in MIGRATION_2_TO_3:
+                    connection.execute(statement)
+                for statement in MIGRATION_3_TO_4:
+                    connection.execute(statement)
+                connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            elif version == 3:
+                for statement in MIGRATION_3_TO_4:
                     connection.execute(statement)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             elif version != SCHEMA_VERSION:

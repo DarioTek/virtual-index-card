@@ -14,7 +14,7 @@ All durable data — accounts, sessions, decks, cards, and per-deck card order �
 - Multiple private decks per account with sequential defaults or unique custom names; owners can rename decks and permanently delete empty non-last decks, while users cannot see or modify another account's decks or cards.
 - Add, edit, delete, and flip cards on the management page, newest-created first.
 - Review mode: one card at a time, tap to flip, cycle through the saved deck order, or shuffle from Review (returns to card 1). The shuffled order survives reloads; the management page remains newest-first.
-- Plain-text notes with safe HTML escaping.
+- Rich-text card formatting on both front and back with keyboard-accessible toolbar controls for **bold**, **italic**, **underline**, and a fixed WCAG AA 4-color palette (`black`, `green`, `red`, `blue`), supporting overlapping styles, a 5,000 visible Unicode code-point limit per side, safe server-side canonicalization/escaping, and verbatim preservation of plain-text cards.
 - CSRF-protected writes and hashed passwords/session tokens.
 
 ## Prerequisites
@@ -61,7 +61,8 @@ Configuration (all optional):
 uv run pytest -q
 ```
 
-Baseline before multi-deck changes (2026-11-27): **65 passed**, 1 Starlette/httpx deprecation warning. Re-run the suite after this change.
+Baseline before multi-deck changes (2026-11-27): **65 passed**, 1 Starlette/httpx deprecation warning.
+Current suite after card-formatting changes (#7): **90 passed**, 1 Starlette/httpx deprecation warning.
 
 ## Project layout
 
@@ -71,8 +72,9 @@ src/virtual_index_card/
   admin.py        ensure_admin() shared by the CLI and env bootstrap
   create_admin.py `python -m virtual_index_card.create_admin` CLI
   config.py       Environment-based settings
-  db.py           SQLite connection, schema version 3, v1 → v2 → v3 and v2 → v3 migrations
+  db.py           SQLite connection, schema version 4, and v1 → v2 → v3 → v4 migrations
   domain.py       Card model, validation, username/password rules, Fisher–Yates shuffle
+  formatting.py   Rich-text document allowlist validation, visible-length checks, and safe HTML rendering
   repository.py   User-scoped SQLite queries and account-request persistence
   security.py     Password hashing, temporary-password generation, token helpers
   templates/      Jinja pages

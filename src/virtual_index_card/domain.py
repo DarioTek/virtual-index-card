@@ -5,9 +5,14 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Any, Sequence
 
-MAX_NOTE_LENGTH = 5000
+from .formatting import (
+    MAX_NOTE_LENGTH,
+    FormattingValidationError,
+    normalize_rich_document,
+)
+
 MAX_DECK_NAME_LENGTH = 100
 USERNAME_MIN = 3
 USERNAME_MAX = 30
@@ -43,6 +48,8 @@ class Card:
     position: int
     created_at: str
     updated_at: str
+    front_rich: dict[str, Any] | None = None
+    back_rich: dict[str, Any] | None = None
 
 
 def utc_now() -> str:
@@ -50,12 +57,26 @@ def utc_now() -> str:
 
 
 def clean_note(value: str, field: str) -> str:
-    text = value.strip()
+    text = value.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         raise ValidationError(f"{field} must not be empty.")
     if len(text) > MAX_NOTE_LENGTH:
         raise ValidationError(f"{field} must be at most {MAX_NOTE_LENGTH} characters.")
     return text
+
+
+def clean_card_side(
+    plain_value: str,
+    rich_value: dict[str, Any] | None,
+    field: str,
+) -> tuple[str, dict[str, Any] | None]:
+    """Validate either a plain-text side or a formatted rich-text side."""
+    if rich_value is None:
+        return clean_note(plain_value, field), None
+    try:
+        return normalize_rich_document(rich_value, field, max_length=MAX_NOTE_LENGTH)
+    except FormattingValidationError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def clean_deck_name(value: str) -> str:

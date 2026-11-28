@@ -135,7 +135,7 @@ def test_users_can_create_and_select_independent_decks(client: TestClient) -> No
     second_page = client.get(created.headers["location"])
     assert "My Deck 2" in second_page.text
     assert f'id="create-form" class="card-form" data-deck-id="{second_deck_id}"' in second_page.text
-    assert "app.js?v=deck-context-1" in second_page.text
+    assert "app.js?v=formatting-1" in second_page.text
     assert "first-deck card" not in second_page.text
     second_card_response = client.post(
         f"/api/cards?deck_id={second_deck_id}",
@@ -492,3 +492,219 @@ def test_review_shows_only_the_signed_in_accounts_cards(
     assert "bob front" in page.text
     assert "alice front" not in page.text
     assert "Card 1 of 1" in page.text
+
+
+def test_formatted_cards_round_trip_in_management_edit_and_review(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    headers = csrf_headers(client)
+
+    front_rich = {
+        "version": 1,
+        "blocks": [
+            {
+                "type": "paragraph",
+                "runs": [
+                    {"text": "Bold ", "bold": True},
+                    {"text": "overlap", "bold": True, "italic": True, "underline": True, "color": "blue"},
+                ],
+            },
+            {
+                "type": "blockquote",
+                "runs": [{"text": "Quoted line 1\nQuoted line 2", "color": "green"}],
+            },
+        ],
+    }
+    back_rich = {
+        "version": 1,
+        "blocks": [
+            {
+                "type": "paragraph",
+                "runs": [
+                    {"text": "Green ", "color": "green"},
+                    {"text": "Blue ", "color": "blue", "italic": True},
+                    {"text": "Red ", "color": "red", "underline": True},
+                    {"text": "Black", "color": "black", "bold": True},
+                ],
+            }
+        ],
+    }
+
+    created = client.post(
+        "/api/cards",
+        json={
+            "front": "ignored plain",
+            "back": "ignored plain",
+            "front_rich": front_rich,
+            "back_rich": back_rich,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    card = created.json()["card"]
+    card_id = card["id"]
+    assert card["front"] == "Bold overlap\nQuoted line 1\nQuoted line 2"
+    assert card["back"] == "Green Blue Red Black"
+    assert card["front_rich"] is not None
+    assert card["back_rich"] is not None
+
+    management = client.get("/")
+    assert management.status_code == 200
+    assert "<strong>Bold </strong>" in management.text
+    assert '<span class="fmt-color-blue"><strong><em><u>overlap</u></em></strong></span>' in management.text
+    assert 'role="blockquote"' in management.text
+    assert '<span class="fmt-color-green">Quoted line 1</span>' in management.text
+    assert '<span class="fmt-color-green">Quoted line 2</span>' in management.text
+    assert '<span class="fmt-color-green">Green </span>' in management.text
+    assert '<span class="fmt-color-blue"><em>Blue </em></span>' in management.text
+    assert '<span class="fmt-color-red"><u>Red </u></span>' in management.text
+    assert '<span class="fmt-color-black"><strong>Black</strong></span>' in management.text
+    assert '<script type="application/json" class="initial-rich-doc">' in management.text
+
+    review = client.get("/review")
+    assert review.status_code == 200
+    assert '<span class="fmt-color-blue"><strong><em><u>overlap</u></em></strong></span>' in review.text
+    assert 'role="blockquote"' in review.text
+    assert '<span class="fmt-color-blue"><em>Blue </em></span>' in review.text
+
+    updated = client.patch(
+        f"/api/cards/{card_id}",
+        json={"front": "Reverted plain", "back": "Also plain", "front_rich": None, "back_rich": None},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["card"]["front_rich"] is None
+    assert updated.json()["card"]["back_rich"] is None
+    reloaded = client.get("/")
+    assert "Reverted plain" in reloaded.text
+    assert '<span class="fmt-color-blue">' not in reloaded.text
+
+
+def test_formatting_toolbar_accessibility_attributes_present(client: TestClient) -> None:
+    register(client, "alice")
+    add_card(client, "sample front", "sample back")
+    page = client.get("/")
+    assert page.status_code == 200
+    assert page.text.count('role="toolbar"') == 4
+    assert 'aria-label="Front formatting"' in page.text
+    assert 'aria-label="Back formatting"' in page.text
+    for label in ("Bold", "Italic", "Underline"):
+        assert f'aria-label="{label}"' in page.text
+    assert 'data-command="blockquote"' not in page.text
+    assert 'aria-label="Block quote"' not in page.text
+    for color in ("Black", "Green", "Red", "Blue"):
+        assert f'aria-label="Text color: {color}"' in page.text
+    for removed in ("Orange", "Pink"):
+        assert f'aria-label="Text color: {removed}"' not in page.text
+
+
+def test_formatting_validation_boundaries_and_xss_defense(
+    client: TestClient, settings: Settings
+) -> None:
+    register(client, "alice")
+    headers = csrf_headers(client)
+
+    ok_5000 = client.post(
+        "/api/cards",
+        json={
+            "front": "",
+            "back": "ok",
+            "front_rich": {
+                "version": 1,
+                "blocks": [{"type": "paragraph", "runs": [{"text": "😀" * 5000, "bold": True}]}],
+            },
+        },
+        headers=headers,
+    )
+    assert ok_5000.status_code == 201
+
+    too_long = client.post(
+        "/api/cards",
+        json={
+            "front": "",
+            "back": "ok",
+            "front_rich": {
+                "version": 1,
+                "blocks": [{"type": "paragraph", "runs": [{"text": "😀" * 5001, "bold": True}]}],
+            },
+        },
+        headers=headers,
+    )
+    assert too_long.status_code == 422
+
+    empty_rich = client.post(
+        "/api/cards",
+        json={
+            "front": "",
+            "back": "ok",
+            "front_rich": {
+                "version": 1,
+                "blocks": [{"type": "blockquote", "runs": [{"text": "   ", "bold": True}]}],
+            },
+        },
+        headers=headers,
+    )
+    assert empty_rich.status_code == 422
+
+    bad_color = client.post(
+        "/api/cards",
+        json={
+            "front": "",
+            "back": "ok",
+            "front_rich": {
+                "version": 1,
+                "blocks": [{"type": "paragraph", "runs": [{"text": "hi", "color": "purple"}]}],
+            },
+        },
+        headers=headers,
+    )
+    assert bad_color.status_code == 422
+
+    hostile = client.post(
+        "/api/cards",
+        json={
+            "front": "<script>alert(1)</script>",
+            "back": "",
+            "back_rich": {
+                "version": 1,
+                "blocks": [
+                    {
+                        "type": "paragraph",
+                        "runs": [{"text": "</script><script>alert(2)</script>", "bold": True}],
+                    }
+                ],
+            },
+        },
+        headers=headers,
+    )
+    assert hostile.status_code == 201
+    hostile_id = hostile.json()["card"]["id"]
+
+    page = client.get("/")
+    assert "<script>alert(1)</script>" not in page.text
+    assert "<script>alert(2)</script>" not in page.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
+    assert "<strong>&lt;/script&gt;&lt;script&gt;alert(2)&lt;/script&gt;</strong>" in page.text
+
+    # Account isolation and CSRF checks remain intact for formatted updates.
+    no_csrf = client.patch(
+        f"/api/cards/{hostile_id}",
+        json={"front": "x", "back": "y"},
+    )
+    assert no_csrf.status_code == 403
+
+    other = TestClient(create_app(settings))
+    register(other, "bob")
+    assert other.patch(
+        f"/api/cards/{hostile_id}",
+        json={
+            "front": "stolen",
+            "back": "stolen",
+            "front_rich": {
+                "version": 1,
+                "blocks": [{"type": "paragraph", "runs": [{"text": "stolen", "bold": True}]}],
+            },
+        },
+        headers=csrf_headers(other),
+    ).status_code == 404
